@@ -227,6 +227,32 @@ test('ranged enemies attack operators in range while moving', () => {
   assert.equal(result.damagedOperators[0], sniper);
 });
 
+test('enemy combat clears stale live blockers without melee attacking them', () => {
+  const map = { width: 2, height: 1, grid: [['path', 'path']], initialCost: 30, maxCost: 30 };
+  const deployment = createDeploymentSystem({
+    map,
+    costSystem: createCostSystem({ initialCost: 30, maxCost: 30 }),
+    operatorCatalog: DEFAULT_OPERATORS
+  });
+  const guard = deployment.deploy('guard', { x: 0, y: 0 }).operator;
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.infantry,
+    attack: 40,
+    attackInterval: 1,
+    range: { type: 'melee', radius: 0 }
+  }, { pathId: 'main' });
+  enemy.cell = { x: 1, y: 0 };
+  enemy.blockedBy = guard.id;
+  enemy.attackTimer = 1;
+  guard.blockedEnemies = [];
+
+  const result = createCombatSystem().tick(1, { operators: [guard], enemies: [enemy] });
+
+  assert.equal(guard.hp, guard.maxHp);
+  assert.equal(enemy.blockedBy, null);
+  assert.equal(result.damagedOperators.length, 0);
+});
+
 test('combat system lets pattern range operators hit painted cells only', () => {
   const operatorCatalog = {
     patternSniper: {

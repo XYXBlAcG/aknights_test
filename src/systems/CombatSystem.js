@@ -154,9 +154,12 @@ function selectHealTarget(operator, operators) {
 }
 
 function selectEnemyTarget(enemy, operators) {
-  const blocker = operators.find((operator) => operator.id === enemy.blockedBy && !operator.isDead);
-  if (blocker) {
-    return blocker;
+  if (enemy.blockedBy) {
+    const blocker = operators.find((operator) => operator.id === enemy.blockedBy && !operator.isDead);
+    if (blocker && isEnemyBlockedByOperator(enemy, blocker)) {
+      return blocker;
+    }
+    enemy.blockedBy = null;
   }
 
   if (!enemy.range || enemy.range.type === 'melee') {
@@ -178,4 +181,9 @@ function selectEnemyTarget(enemy, operators) {
   return [...inRange].sort((a, b) => {
     return manhattanDistance(enemy.cell, a.cell) - manhattanDistance(enemy.cell, b.cell);
   })[0];
+}
+
+function isEnemyBlockedByOperator(enemy, operator) {
+  return isSameCell(enemy.cell, operator.cell)
+    && operator.blockedEnemies.some((blockedEnemy) => blockedEnemy === enemy || blockedEnemy.id === enemy.id);
 }
