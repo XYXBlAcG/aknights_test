@@ -29,6 +29,7 @@ export class BlockingSystem {
       const blocker = activeOperators.find((operator) => {
         return operator.deployType === 'ground'
           && operator.canBlockMore()
+          && (enemy.blockBypass ?? 0) <= operator.block
           && isSameCell(operator.cell, enemy.cell);
       });
 

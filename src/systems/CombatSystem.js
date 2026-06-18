@@ -1,4 +1,5 @@
 import { isCellInRange } from '../utils/RangeMath.js';
+import { isSameCell, manhattanDistance } from '../utils/GridMath.js';
 import {
   consumeNextAttackSkill,
   getEffectiveAttack,
@@ -20,6 +21,7 @@ export class CombatSystem {
     const killedEnemies = [];
     const killedOperators = [];
     const healedOperators = [];
+    const damagedOperators = [];
 
     operators.filter((operator) => !operator.isDead).forEach((operator) => {
       operator.attackTimer += deltaSeconds;
@@ -54,20 +56,23 @@ export class CombatSystem {
       }
     });
 
-    enemies.filter((enemy) => !enemy.isDead && enemy.blockedBy && enemy.attack > 0).forEach((enemy) => {
+    enemies.filter((enemy) => !enemy.isDead && enemy.attack > 0).forEach((enemy) => {
       enemy.attackTimer += deltaSeconds;
       if (enemy.attackTimer < enemy.attackInterval) {
         return;
       }
 
-      const target = operators.find((operator) => operator.id === enemy.blockedBy && !operator.isDead);
+      const target = selectEnemyTarget(enemy, operators);
       if (!target) {
-        enemy.blockedBy = null;
+        if (enemy.blockedBy) {
+          enemy.blockedBy = null;
+        }
         return;
       }
 
-      target.hp -= calculatePhysicalDamage(enemy.attack, getEffectiveDefense(target));
+      target.hp -= calculateEnemyDamage(enemy, target);
       enemy.attackTimer = 0;
+      damagedOperators.push(target);
       if (target.hp <= 0 && !killedOperators.includes(target)) {
         target.hp = 0;
         target.blockedEnemies.forEach((blockedEnemy) => {
@@ -84,7 +89,8 @@ export class CombatSystem {
     return {
       killedEnemies,
       killedOperators,
-      healedOperators
+      healedOperators,
+      damagedOperators
     };
   }
 }
@@ -98,6 +104,13 @@ export function calculateDamage(attacker, target) {
 
 export function calculatePhysicalDamage(attack, defense) {
   return Math.max(Math.ceil(attack * 0.05), attack - defense);
+}
+
+export function calculateEnemyDamage(enemy, target) {
+  if (enemy.damageType === 'arts') {
+    return Math.max(1, Math.round(enemy.attack * (1 - (target.resistance ?? 0))));
+  }
+  return calculatePhysicalDamage(enemy.attack, getEffectiveDefense(target));
 }
 
 function selectAttackTarget(operator, enemies) {
@@ -138,4 +151,31 @@ function selectHealTarget(operator, operators) {
   }
 
   return candidates.sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
+}
+
+function selectEnemyTarget(enemy, operators) {
+  const blocker = operators.find((operator) => operator.id === enemy.blockedBy && !operator.isDead);
+  if (blocker) {
+    return blocker;
+  }
+
+  if (!enemy.range || enemy.range.type === 'melee') {
+    return null;
+  }
+
+  const inRange = operators.filter((operator) => {
+    return !operator.isDead && isCellInRange(enemy.cell, operator.cell, enemy.range);
+  });
+
+  if (inRange.length === 0) {
+    return null;
+  }
+
+  if (enemy.targeting === 'lowest-hp-percent') {
+    return [...inRange].sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
+  }
+
+  return [...inRange].sort((a, b) => {
+    return manhattanDistance(enemy.cell, a.cell) - manhattanDistance(enemy.cell, b.cell);
+  })[0];
 }

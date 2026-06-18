@@ -40,6 +40,30 @@ test('blocking stops ground enemies but ignores flying enemies', () => {
   assert.equal(flying.blockedBy, null);
 });
 
+test('blocking ignores enemies whose block bypass exceeds operator block', () => {
+  const map = { width: 1, height: 1, grid: [['path']], initialCost: 30, maxCost: 30 };
+  const deployment = createDeploymentSystem({
+    map,
+    costSystem: createCostSystem({ initialCost: 30, maxCost: 30 }),
+    operatorCatalog: DEFAULT_OPERATORS
+  });
+  const vanguard = deployment.deploy('vanguard', { x: 0, y: 0 }).operator;
+  const enemy = {
+    id: 'bypass-1',
+    cell: { x: 0, y: 0 },
+    isFlying: false,
+    canBeBlocked: true,
+    blockBypass: 3,
+    blockedBy: null,
+    isDead: false
+  };
+
+  createBlockingSystem().update([vanguard], [enemy]);
+
+  assert.equal(enemy.blockedBy, null);
+  assert.equal(vanguard.blockedEnemies.length, 0);
+});
+
 test('enemy runtime applies first phase stats when phases are present', () => {
   const enemy = new Enemy({
     ...DEFAULT_ENEMIES.heavy,
@@ -175,6 +199,32 @@ test('combat system lets ranged operators damage enemies in range', () => {
   combat.tick(0.8, { operators: [sniper], enemies: [enemy] });
 
   assert.equal(enemy.hp, 92);
+});
+
+test('ranged enemies attack operators in range while moving', () => {
+  const map = { width: 3, height: 1, grid: [['path', 'path', 'high']], initialCost: 30, maxCost: 30 };
+  const deployment = createDeploymentSystem({
+    map,
+    costSystem: createCostSystem({ initialCost: 30, maxCost: 30 }),
+    operatorCatalog: DEFAULT_OPERATORS
+  });
+  const sniper = deployment.deploy('sniper', { x: 2, y: 0 }).operator;
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.infantry,
+    id: 'ranged-caster',
+    attack: 40,
+    attackInterval: 1,
+    damageType: 'arts',
+    range: { type: 'diamond', radius: 2 },
+    targeting: 'nearest'
+  }, { pathId: 'main' });
+  enemy.cell = { x: 0, y: 0 };
+  enemy.attackTimer = 1;
+
+  const result = createCombatSystem().tick(1, { operators: [sniper], enemies: [enemy] });
+
+  assert.equal(sniper.hp, 100);
+  assert.equal(result.damagedOperators[0], sniper);
 });
 
 test('combat system lets pattern range operators hit painted cells only', () => {
