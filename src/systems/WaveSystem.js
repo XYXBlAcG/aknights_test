@@ -75,12 +75,13 @@ export class WaveSystem {
 }
 
 function expandTimeline(timeline) {
-  return [...timeline]
-    .sort((a, b) => a.startTime - b.startTime)
-    .flatMap((event) => {
+  return timeline
+    .map((event, eventIndex) => ({ event, eventIndex }))
+    .sort((a, b) => a.event.startTime - b.event.startTime)
+    .flatMap(({ event, eventIndex }) => {
       const interval = event.interval ?? 0.8;
       return Array.from({ length: event.count }, (_, index) => ({
-        eventId: `${event.wave}:${event.startTime}:${event.enemyType}:${event.pathId}`,
+        eventId: `${eventIndex}:${event.wave}:${event.startTime}:${event.enemyType}:${event.pathId}`,
         wave: event.wave,
         enemyType: event.enemyType,
         pathId: event.pathId,

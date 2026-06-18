@@ -253,11 +253,18 @@ export class Game {
         color: attack.source.color
       }));
     });
-    [...(result.killedEnemies ?? []), ...(result.phaseChangedEnemies ?? [])].forEach((enemy) => {
+    result.killedEnemies?.forEach((enemy) => {
       this.effectSystem.add(createEnemyDeathEffect({
         cell: enemy.cell,
         color: enemy.color,
-        phaseBreak: !enemy.isDead
+        phaseBreak: false
+      }));
+    });
+    result.phaseChangedEnemies?.forEach((enemy) => {
+      this.effectSystem.add(createEnemyDeathEffect({
+        cell: enemy.cell,
+        color: enemy.color,
+        phaseBreak: true
       }));
     });
   }

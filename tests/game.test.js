@@ -4,6 +4,7 @@ import { Game } from '../src/core/Game.js';
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
 import { DEFAULT_ENEMIES } from '../src/data/defaultEnemies.js';
 import { Enemy } from '../src/entities/Enemy.js';
+import { createWaveSystem } from '../src/systems/WaveSystem.js';
 
 const map = {
   version: '2.0',
@@ -339,4 +340,41 @@ test('game emits attack and death effects during combat', () => {
   const types = game.getState().effects.map((effect) => effect.type);
   assert.equal(types.includes('operator_attack'), true);
   assert.equal(types.includes('enemy_death'), true);
+});
+
+test('game emits phase break effect even when enemy object is now dead', () => {
+  const game = new Game({
+    map: { ...map, timeline: [] },
+    operatorCatalog: DEFAULT_OPERATORS,
+    enemyCatalog: DEFAULT_ENEMIES
+  });
+  const enemy = {
+    cell: { x: 0, y: 0 },
+    color: '#e15f5f',
+    isDead: true
+  };
+
+  game.addCombatEffects({
+    phaseChangedEnemies: [enemy],
+    killedEnemies: [enemy]
+  });
+
+  assert.equal(game.getState().effects.some((effect) => {
+    return effect.type === 'enemy_death' && effect.payload.phaseBreak === true;
+  }), true);
+});
+
+test('wave warnings are unique for duplicate timeline entries', () => {
+  const waveSystem = createWaveSystem({
+    enemyCatalog: DEFAULT_ENEMIES,
+    timeline: [
+      { wave: 1, startTime: 2, enemyType: 'infantry', count: 1, interval: 0.1, pathId: 'main' },
+      { wave: 1, startTime: 2, enemyType: 'infantry', count: 1, interval: 0.1, pathId: 'main' }
+    ]
+  });
+
+  const warnings = waveSystem.warningsDue(2);
+
+  assert.equal(warnings.length, 2);
+  assert.equal(new Set(warnings.map((warning) => warning.id)).size, 2);
 });
