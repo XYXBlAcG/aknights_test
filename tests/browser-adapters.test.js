@@ -343,3 +343,31 @@ test('operator deck model reason priority matches deployment checks', () => {
   });
   assert.equal(classFull.find((operator) => operator.id === 'guard').disabledReason, '职业上限');
 });
+
+test('operator deck model uses map deploy limit for custom class fallback', () => {
+  const custom = {
+    ...DEFAULT_OPERATORS.guard,
+    id: 'custom-specialist',
+    name: '自定义特种',
+    class: 'specialist-custom',
+    className: '特种',
+    cost: 1
+  };
+  const operators = Array.from({ length: 8 }, (_, index) => ({
+    id: `custom-specialist-${index}`,
+    class: custom.class
+  }));
+
+  const model = buildOperatorDeckModel({
+    operatorCatalog: { custom },
+    operators,
+    cost: 99,
+    selectedOperatorType: null,
+    deployLimit: 10
+  });
+
+  const card = model.find((operator) => operator.id === custom.id);
+  assert.equal(card.limit, 10);
+  assert.equal(card.disabledReason, '');
+  assert.equal(card.disabled, false);
+});

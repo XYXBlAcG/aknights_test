@@ -27,7 +27,7 @@ export function buildOperatorDeckModel({
 
   return orderedOperatorTemplates(operatorCatalog).map((template) => {
     const id = template.id;
-    const classLimit = CLASS_LIMITS[template.class] ?? TOTAL_DEPLOY_LIMIT;
+    const classLimit = CLASS_LIMITS[template.class] ?? deployLimit;
     const classCount = deployedByClass[template.class] ?? 0;
     const totalFull = operators.length >= deployLimit;
     const classFull = classCount >= classLimit;
