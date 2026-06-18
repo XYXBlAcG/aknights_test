@@ -256,3 +256,27 @@ test('restarting while inspecting restores the previous battle speed', () => {
 
   assert.equal(game.getState().speed, 4);
 });
+
+test('multi-phase enemy rewards cost only after final phase death', () => {
+  const phaseMap = {
+    ...map,
+    initialCost: 30,
+    maxCost: 50,
+    timeline: []
+  };
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.infantry,
+    id: 'reward-phase',
+    rewardCost: 9,
+    phases: [
+      { name: 'first', maxHp: 1, attack: 0, defense: 0, resistance: 0, speed: 1, attackInterval: 1, color: '#e15f5f' },
+      { name: 'second', maxHp: 1, attack: 0, defense: 0, resistance: 0, speed: 1, attackInterval: 1, color: '#d89d4a' }
+    ]
+  }, { pathId: 'main' });
+  const game = new Game({ map: phaseMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+  game.enemies.push(enemy);
+  game.handleEnemyKilled(enemy);
+
+  assert.equal(game.getState().kills, 1);
+  assert.equal(game.getState().cost, 39);
+});

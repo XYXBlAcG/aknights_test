@@ -9,6 +9,7 @@ import { createCostSystem } from '../src/systems/CostSystem.js';
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
 import { DEFAULT_ENEMIES } from '../src/data/defaultEnemies.js';
 import { Enemy } from '../src/entities/Enemy.js';
+import { Operator } from '../src/entities/Operator.js';
 
 test('wave system spawns scheduled enemies once', () => {
   const wave = createWaveSystem({
@@ -395,4 +396,34 @@ test('win lose evaluator distinguishes victory stars and defeat', () => {
   assert.equal(evaluateBattleResult({ lives: 0, leaks: 3, wavesComplete: false, enemiesRemaining: 2 }).state, 'defeat');
   assert.equal(evaluateBattleResult({ lives: 1, leaks: 0, wavesComplete: true, enemiesRemaining: 0 }).stars, 3);
   assert.equal(evaluateBattleResult({ lives: 1, leaks: 1, wavesComplete: true, enemiesRemaining: 0 }).stars, 2);
+});
+
+test('operator damage advances enemy phase before final death', () => {
+  const guard = new Operator({
+    ...DEFAULT_OPERATORS.guard,
+    id: 'phase-breaker',
+    attack: 100,
+    attackInterval: 1
+  }, { x: 0, y: 0 });
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.heavy,
+    id: 'two-bar',
+    phases: [
+      { name: 'bar1', maxHp: 30, attack: 0, defense: 0, resistance: 0, speed: 1, attackInterval: 1, color: '#85a6ff' },
+      { name: 'bar2', maxHp: 40, attack: 0, defense: 0, resistance: 0, speed: 1, attackInterval: 1, color: '#ff8a4d' }
+    ]
+  }, { pathId: 'main' });
+  enemy.cell = { x: 0, y: 0 };
+  enemy.blockedBy = guard.id;
+  guard.blockedEnemies = [enemy];
+  guard.attackTimer = 1;
+
+  const result = createCombatSystem().tick(1, { operators: [guard], enemies: [enemy] });
+
+  assert.equal(enemy.isDead, false);
+  assert.equal(enemy.phaseIndex, 1);
+  assert.equal(enemy.hp, 40);
+  assert.equal(enemy.color, '#ff8a4d');
+  assert.equal(result.phaseChangedEnemies[0], enemy);
+  assert.equal(result.killedEnemies.length, 0);
 });

@@ -23,6 +23,7 @@ export class CombatSystem {
     const killedOperators = [];
     const healedOperators = [];
     const damagedOperators = [];
+    const phaseChangedEnemies = [];
 
     operators.filter((operator) => !operator.isDead).forEach((operator) => {
       operator.attackTimer += deltaSeconds;
@@ -46,12 +47,14 @@ export class CombatSystem {
         return;
       }
 
-      target.hp -= calculateDamage(operator, target);
+      const outcome = applyDamageToEnemy(target, calculateDamage(operator, target));
       consumeNextAttackSkill(operator);
       operator.attackTimer = 0;
-      if (target.hp <= 0 && !killedEnemies.includes(target)) {
-        target.hp = 0;
-        target.blockedBy = null;
+      if (outcome === 'phase_changed') {
+        phaseChangedEnemies.push(target);
+        return;
+      }
+      if (outcome === 'killed' && !killedEnemies.includes(target)) {
         killedEnemies.push(target);
         onEnemyKilled?.(target, operator);
       }
@@ -92,9 +95,23 @@ export class CombatSystem {
       killedEnemies,
       killedOperators,
       healedOperators,
-      damagedOperators
+      damagedOperators,
+      phaseChangedEnemies
     };
   }
+}
+
+function applyDamageToEnemy(enemy, damage) {
+  enemy.hp -= damage;
+  if (enemy.hp > 0) {
+    return 'damaged';
+  }
+  if (enemy.hasMorePhases && enemy.advancePhase()) {
+    return 'phase_changed';
+  }
+  enemy.hp = 0;
+  enemy.blockedBy = null;
+  return 'killed';
 }
 
 export function calculateDamage(attacker, target) {
