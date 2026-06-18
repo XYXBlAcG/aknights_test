@@ -1,5 +1,3 @@
-let effectSequence = 0;
-
 export function createEffectSystem() {
   return new EffectSystem();
 }
@@ -7,17 +5,20 @@ export function createEffectSystem() {
 export class EffectSystem {
   constructor() {
     this.effects = [];
+    this.effectSequence = 0;
   }
 
   add(effect) {
-    effectSequence += 1;
+    this.effectSequence += 1;
     const created = {
-      id: `effect-${effectSequence}`,
+      id: `effect-${this.effectSequence}`,
+      type: effect.type,
       elapsed: 0,
-      ...effect
+      duration: effect.duration,
+      payload: structuredClone(effect.payload)
     };
     this.effects.push(created);
-    return created;
+    return cloneEffect(created);
   }
 
   tick(deltaSeconds) {
@@ -28,7 +29,7 @@ export class EffectSystem {
   }
 
   list() {
-    return this.effects.map((effect) => ({ ...effect, payload: structuredClone(effect.payload) }));
+    return this.effects.map((effect) => cloneEffect(effect));
   }
 
   clear() {
@@ -65,5 +66,12 @@ export function createWaveWarningEffect({ pathId, enemyType, wave, count, startT
     type: 'wave_warning',
     duration,
     payload: { pathId, enemyType, wave, count, startTime }
+  };
+}
+
+function cloneEffect(effect) {
+  return {
+    ...effect,
+    payload: structuredClone(effect.payload)
   };
 }

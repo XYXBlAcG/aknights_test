@@ -49,3 +49,64 @@ test('wave warning effect carries path and enemy payload', () => {
     startTime: 12
   });
 });
+
+test('effect system owns record identity timing payload snapshots and clearing', () => {
+  const effects = createEffectSystem();
+  const source = { x: 1, y: 1 };
+  const target = { x: 3, y: 1 };
+  const payload = { source, target, color: '#f6c445' };
+
+  const created = effects.add({
+    id: 'caller-id',
+    type: 'operator_attack',
+    elapsed: 99,
+    duration: 1,
+    payload,
+    ignored: true
+  });
+  payload.source.x = 9;
+  created.payload.target.x = 8;
+
+  assert.equal(created.id, 'effect-1');
+  assert.equal(created.elapsed, 0);
+  assert.deepEqual(Object.keys(created).sort(), ['duration', 'elapsed', 'id', 'payload', 'type']);
+  assert.deepEqual(effects.list()[0], {
+    id: 'effect-1',
+    type: 'operator_attack',
+    elapsed: 0,
+    duration: 1,
+    payload: {
+      source: { x: 1, y: 1 },
+      target: { x: 3, y: 1 },
+      color: '#f6c445'
+    }
+  });
+
+  const listed = effects.list();
+  listed[0].elapsed = 0.5;
+  listed[0].payload.source.x = 7;
+
+  assert.deepEqual(effects.list()[0], {
+    id: 'effect-1',
+    type: 'operator_attack',
+    elapsed: 0,
+    duration: 1,
+    payload: {
+      source: { x: 1, y: 1 },
+      target: { x: 3, y: 1 },
+      color: '#f6c445'
+    }
+  });
+  assert.deepEqual(created.payload, {
+    source: { x: 1, y: 1 },
+    target: { x: 8, y: 1 },
+    color: '#f6c445'
+  });
+
+  const freshEffects = createEffectSystem();
+  const fresh = freshEffects.add(createEnemyDeathEffect({ cell: { x: 0, y: 0 } }));
+  assert.equal(fresh.id, 'effect-1');
+
+  effects.clear();
+  assert.deepEqual(effects.list(), []);
+});
