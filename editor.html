@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Map Editor - Aknights Test</title>
+  </head>
+  <body class="editor-page">
+    <div id="editor-app">
+      <header class="editor-topbar">
+        <div class="brand">MAP EDITOR / FIELD TEST</div>
+        <nav class="editor-nav">
+          <a href="/">返回战斗</a>
+          <button id="editor-export-button">导出</button>
+          <button id="editor-import-button">导入</button>
+          <button id="editor-download-button">下载 JSON</button>
+        </nav>
+      </header>
+
+      <main class="editor-shell">
+        <aside class="editor-left">
+          <section class="editor-panel">
+            <h2>格子工具</h2>
+            <div id="terrain-tools" class="tool-grid">
+              <button data-terrain="path">路径</button>
+              <button data-terrain="high">高台</button>
+              <button data-terrain="wall">障碍</button>
+            </div>
+          </section>
+
+          <section class="editor-panel">
+            <h2>地图属性</h2>
+            <label>名称 <input id="map-name-input" /></label>
+            <label>ID <input id="map-id-input" /></label>
+            <label>初始费用 <input id="initial-cost-input" type="number" /></label>
+            <label>费用上限 <input id="max-cost-input" type="number" /></label>
+            <label>基地生命 <input id="max-lives-input" type="number" /></label>
+            <label>总波次 <input id="total-waves-input" type="number" /></label>
+          </section>
+        </aside>
+
+        <section class="editor-canvas-wrap">
+          <canvas id="editor-canvas" width="960" height="640"></canvas>
+          <div id="editor-message" class="editor-message"></div>
+        </section>
+
+        <aside class="editor-right">
+          <section class="editor-panel">
+            <h2>路径</h2>
+            <div id="path-list" class="path-list"></div>
+            <div class="row-actions">
+              <button id="add-path-button">新增路径</button>
+              <button id="remove-path-point-button">删除末点</button>
+            </div>
+          </section>
+
+          <section class="editor-panel">
+            <h2>时间轴</h2>
+            <div id="timeline-list" class="timeline-list"></div>
+            <button id="add-event-button">新增出怪事件</button>
+          </section>
+
+          <section class="editor-panel editor-json-panel">
+            <h2>JSON</h2>
+            <textarea id="json-textarea" spellcheck="false"></textarea>
+            <div id="validation-panel" class="validation-panel"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/editor.js"></script>
+  </body>
+</html>
