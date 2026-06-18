@@ -5,6 +5,8 @@ const OPERATOR_CLASSES = new Set(['vanguard', 'guard', 'defender', 'sniper', 'ca
 const DEPLOY_TYPES = new Set(['ground', 'high']);
 const DAMAGE_TYPES = new Set(['physical', 'arts', 'heal']);
 const TARGETING_TYPES = new Set(['blocked-first', 'exit-first', 'flying-first', 'high-defense', 'lowest-hp-percent']);
+const ENEMY_DAMAGE_TYPES = new Set(['physical', 'arts']);
+const ENEMY_TARGETING_TYPES = new Set(['blocked-first', 'nearest', 'lowest-hp-percent']);
 const SKILL_TYPES = new Set(['instant_cost', 'buff', 'next_attack', 'instant_heal']);
 const SKILL_TRIGGER_MODES = new Set(['manual', 'auto']);
 const MAX_SKILLS_PER_OPERATOR = 3;
@@ -42,6 +44,11 @@ export function normalizeOperatorTemplate(template) {
 }
 
 export function normalizeEnemyTemplate(template) {
+  const damageType = oneOf(template?.damageType ?? 'physical', ENEMY_DAMAGE_TYPES, 'enemy damage type');
+  const targeting = oneOf(template?.targeting ?? 'blocked-first', ENEMY_TARGETING_TYPES, 'enemy targeting');
+  const range = normalizeRange(template?.range ?? { type: 'melee', radius: 0 });
+  const phases = normalizeEnemyPhases(template?.phases ?? []);
+
   return {
     id: normalizeId(template?.id, 'enemy id'),
     name: nonEmptyString(template?.name, 'enemy name'),
@@ -56,6 +63,12 @@ export function normalizeEnemyTemplate(template) {
     rewardCost: integerInRange(template?.rewardCost ?? 0, 0, 999, 'reward cost'),
     elite: Boolean(template?.elite),
     boss: Boolean(template?.boss),
+    damageType,
+    targeting,
+    range,
+    blockBypass: integerInRange(template?.blockBypass ?? 0, 0, 99, 'block bypass'),
+    description: String(template?.description ?? ''),
+    phases,
     color: nonEmptyString(template?.color ?? '#e15f5f', 'color')
   };
 }
@@ -154,6 +167,28 @@ function oneOf(value, allowed, label) {
     throw new Error(`${label} must be one of ${[...allowed].join(', ')}`);
   }
   return value;
+}
+
+function normalizeEnemyPhases(phases) {
+  if (!Array.isArray(phases)) {
+    throw new Error('enemy phases must be an array');
+  }
+  return phases.map((phase, index) => ({
+    name: nonEmptyString(phase?.name ?? `phase-${index + 1}`, 'enemy phase name'),
+    maxHp: numberInRange(phase?.maxHp, 1, 999999, 'phase max hp'),
+    attack: numberInRange(phase?.attack ?? 0, 0, 99999, 'phase attack'),
+    defense: numberInRange(phase?.defense ?? 0, 0, 99999, 'phase defense'),
+    resistance: numberInRange(phase?.resistance ?? 0, 0, 0.95, 'phase resistance'),
+    speed: numberInRange(phase?.speed, 0.01, 20, 'phase speed'),
+    attackInterval: numberInRange(phase?.attackInterval ?? 1.5, 0.1, 60, 'phase attack interval'),
+    canBeBlocked: 'canBeBlocked' in phase ? Boolean(phase.canBeBlocked) : undefined,
+    damageType: phase?.damageType
+      ? oneOf(phase.damageType, ENEMY_DAMAGE_TYPES, 'phase damage type')
+      : undefined,
+    range: phase?.range ? normalizeRange(phase.range) : undefined,
+    color: phase?.color ? nonEmptyString(phase.color, 'phase color') : undefined,
+    description: String(phase?.description ?? '')
+  }));
 }
 
 function normalizeSkills(template) {

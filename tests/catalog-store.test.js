@@ -57,6 +57,48 @@ test('operator and enemy templates normalize into gameplay-ready data', () => {
   assert.equal(enemy.elite, true);
 });
 
+test('enemy templates normalize range damage bypass and phases', () => {
+  const enemy = normalizeEnemyTemplate({
+    id: 'caster-boss',
+    name: '术式队长',
+    maxHp: '100',
+    attack: '20',
+    defense: '4',
+    resistance: '0.2',
+    speed: '0.8',
+    attackInterval: '1.4',
+    canBeBlocked: true,
+    isFlying: false,
+    rewardCost: '8',
+    elite: true,
+    boss: true,
+    damageType: 'arts',
+    targeting: 'nearest',
+    blockBypass: '2',
+    range: { type: 'diamond', radius: 2 },
+    phases: [{
+      name: '第二形态',
+      maxHp: '150',
+      attack: '28',
+      defense: '8',
+      resistance: '0.35',
+      speed: '1.1',
+      attackInterval: '1.1',
+      color: '#b98cff',
+      description: '破防后移动速度提升。'
+    }],
+    color: '#ffaa55'
+  });
+
+  assert.equal(enemy.damageType, 'arts');
+  assert.equal(enemy.targeting, 'nearest');
+  assert.equal(enemy.blockBypass, 2);
+  assert.deepEqual(enemy.range, { type: 'diamond', radius: 2 });
+  assert.equal(enemy.phases.length, 1);
+  assert.equal(enemy.phases[0].maxHp, 150);
+  assert.equal(enemy.phases[0].description, '破防后移动速度提升。');
+});
+
 test('operator normalization migrates legacy skill into a three-skill list', () => {
   const operator = normalizeOperatorTemplate({
     ...DEFAULT_OPERATORS.guard,

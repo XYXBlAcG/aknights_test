@@ -40,6 +40,39 @@ test('blocking stops ground enemies but ignores flying enemies', () => {
   assert.equal(flying.blockedBy, null);
 });
 
+test('enemy runtime applies first phase stats when phases are present', () => {
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.heavy,
+    id: 'phase-heavy',
+    phases: [{
+      name: '装甲外壳',
+      maxHp: 60,
+      attack: 12,
+      defense: 20,
+      resistance: 0.1,
+      speed: 0.4,
+      attackInterval: 2.2,
+      color: '#85a6ff'
+    }, {
+      name: '核心暴露',
+      maxHp: 40,
+      attack: 24,
+      defense: 4,
+      resistance: 0,
+      speed: 1.2,
+      attackInterval: 1.2,
+      color: '#ff8a4d'
+    }]
+  }, { pathId: 'main' });
+
+  assert.equal(enemy.phaseIndex, 0);
+  assert.equal(enemy.maxHp, 60);
+  assert.equal(enemy.hp, 60);
+  assert.equal(enemy.defense, 20);
+  assert.equal(enemy.color, '#85a6ff');
+  assert.equal(enemy.phases.length, 2);
+});
+
 test('combat system lets ranged operators damage enemies in range', () => {
   const map = { width: 2, height: 1, grid: [['path', 'high']], initialCost: 30, maxCost: 30 };
   const deployment = createDeploymentSystem({

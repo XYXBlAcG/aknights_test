@@ -11,6 +11,12 @@ export const DEFAULT_ENEMIES = {
     canBeBlocked: true,
     isFlying: false,
     rewardCost: 3,
+    damageType: 'physical',
+    targeting: 'blocked-first',
+    range: { type: 'melee', radius: 0 },
+    blockBypass: 0,
+    description: '基础敌方单位。',
+    phases: [],
     color: '#e15f5f'
   },
   heavy: {
@@ -25,6 +31,12 @@ export const DEFAULT_ENEMIES = {
     canBeBlocked: true,
     isFlying: false,
     rewardCost: 5,
+    damageType: 'physical',
+    targeting: 'blocked-first',
+    range: { type: 'melee', radius: 0 },
+    blockBypass: 0,
+    description: '基础敌方单位。',
+    phases: [],
     color: '#d89d4a'
   },
   drone: {
@@ -39,6 +51,12 @@ export const DEFAULT_ENEMIES = {
     canBeBlocked: false,
     isFlying: true,
     rewardCost: 5,
+    damageType: 'physical',
+    targeting: 'blocked-first',
+    range: { type: 'melee', radius: 0 },
+    blockBypass: 0,
+    description: '飞行单位，不会被地面阻挡。',
+    phases: [],
     color: '#5fd4ff'
   }
 };
