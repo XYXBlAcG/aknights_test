@@ -295,3 +295,51 @@ test('operator battlefield model exposes first skill sp ratio', () => {
     ready: false
   });
 });
+
+test('operator battlefield model hides non-positive skill sp cost', () => {
+  const model = buildOperatorSpBarModel({
+    skills: [{ id: 'skill', sp: 5, spCost: 0, triggerMode: 'manual' }]
+  });
+
+  assert.deepEqual(model, {
+    visible: false,
+    ratio: 0,
+    ready: false
+  });
+  assert.equal(Number.isFinite(model.ratio), true);
+});
+
+test('operator battlefield model hides missing skill sp cost', () => {
+  const model = buildOperatorSpBarModel({
+    skills: [{ id: 'skill', sp: 5, triggerMode: 'manual' }]
+  });
+
+  assert.deepEqual(model, {
+    visible: false,
+    ratio: 0,
+    ready: false
+  });
+  assert.equal(Number.isFinite(model.ratio), true);
+});
+
+test('operator deck model reason priority matches deployment checks', () => {
+  const totalFull = buildOperatorDeckModel({
+    operatorCatalog: DEFAULT_OPERATORS,
+    operators: [{ class: 'guard' }],
+    cost: 0,
+    selectedOperatorType: null,
+    redeployCooldowns: { vanguard: 7.4 },
+    deployLimit: 1
+  });
+  assert.equal(totalFull.find((operator) => operator.id === 'vanguard').disabledReason, '部署上限');
+
+  const classFull = buildOperatorDeckModel({
+    operatorCatalog: DEFAULT_OPERATORS,
+    operators: [{ class: 'guard' }, { class: 'guard' }, { class: 'guard' }],
+    cost: 0,
+    selectedOperatorType: null,
+    redeployCooldowns: { guard: 7.4 },
+    deployLimit: 8
+  });
+  assert.equal(classFull.find((operator) => operator.id === 'guard').disabledReason, '职业上限');
+});

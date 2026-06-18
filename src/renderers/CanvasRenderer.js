@@ -1,5 +1,5 @@
 import { DEFAULT_OPERATORS } from '../data/defaultOperators.js';
-import { buildOperatorSpBarModel } from '../ui/UIController.js';
+import { buildOperatorSpBarModel } from '../ui/OperatorViewModels.js';
 import { hasReadyManualSkill } from '../systems/SkillSystem.js';
 import { gridToCenter, pixelToGrid } from '../utils/GridMath.js';
 import { rangeCellsFor as getRangeCellsFor } from '../utils/RangeMath.js';

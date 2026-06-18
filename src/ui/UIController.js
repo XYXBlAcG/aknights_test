@@ -3,6 +3,8 @@ import { Game } from '../core/Game.js';
 import { GameLoop } from '../core/GameLoop.js';
 import { normalizeMap } from '../data/MapLoader.js';
 
+export { buildOperatorSpBarModel } from './OperatorViewModels.js';
+
 export function formatBattleTime(seconds) {
   const totalSeconds = Math.floor(seconds);
   const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
@@ -32,14 +34,14 @@ export function buildOperatorDeckModel({
     const unaffordable = cost < template.cost;
     const cooldownRemaining = Math.ceil(redeployCooldowns?.[id] ?? 0);
     let disabledReason = '';
-    if (cooldownRemaining > 0) {
-      disabledReason = `再部署 ${cooldownRemaining}s`;
-    } else if (unaffordable) {
-      disabledReason = '费用不足';
-    } else if (totalFull) {
+    if (totalFull) {
       disabledReason = '部署上限';
     } else if (classFull) {
       disabledReason = '职业上限';
+    } else if (cooldownRemaining > 0) {
+      disabledReason = `再部署 ${cooldownRemaining}s`;
+    } else if (unaffordable) {
+      disabledReason = '费用不足';
     }
 
     return {
@@ -89,19 +91,6 @@ export function buildSkillPanelModel(operator) {
     manual: (skill.triggerMode ?? 'manual') !== 'auto',
     rangeSummary: summarizeRange(skill.range)
   }));
-}
-
-export function buildOperatorSpBarModel(operator) {
-  const skills = operator?.skills ?? [operator?.skill].filter(Boolean);
-  const skill = skills.find((item) => (item.triggerMode ?? 'manual') !== 'auto') ?? skills[0];
-  if (!skill) {
-    return { visible: false, ratio: 0, ready: false };
-  }
-  return {
-    visible: true,
-    ratio: Math.max(0, Math.min(1, skill.sp / skill.spCost)),
-    ready: skill.sp >= skill.spCost
-  };
 }
 
 export function buildRenderKeys(state, message = '') {

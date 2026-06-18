@@ -62,3 +62,18 @@ test('retreat starts template redeploy cooldown and blocks redeploy', () => {
 
   assert.equal(deployment.canDeploy('vanguard', { x: 0, y: 0 }).ok, true);
 });
+
+test('clear removes deployed operators and redeploy cooldowns', () => {
+  const cost = createCostSystem({ initialCost: 30, maxCost: 30 });
+  const deployment = createDeploymentSystem({ map, costSystem: cost, operatorCatalog: DEFAULT_OPERATORS });
+  const placed = deployment.deploy('vanguard', { x: 0, y: 0 });
+  deployment.deploy('sniper', { x: 1, y: 0 });
+
+  deployment.retreat(placed.operator.id);
+  assert.equal(deployment.redeployCooldowns.vanguard > 0, true);
+
+  deployment.clear();
+
+  assert.equal(deployment.operators.length, 0);
+  assert.deepEqual(deployment.redeployCooldowns, {});
+});

@@ -112,5 +112,6 @@ export class DeploymentSystem {
 
   clear() {
     this.operators = [];
+    this.redeployCooldowns = {};
   }
 }
