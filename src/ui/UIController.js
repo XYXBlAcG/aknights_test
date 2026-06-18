@@ -1,6 +1,7 @@
 import { CLASS_LIMITS, DEFAULT_OPERATOR_ORDER, TOTAL_DEPLOY_LIMIT } from '../data/defaultOperators.js';
 import { Game } from '../core/Game.js';
 import { GameLoop } from '../core/GameLoop.js';
+import { normalizeMap } from '../data/MapLoader.js';
 
 export function formatBattleTime(seconds) {
   const totalSeconds = Math.floor(seconds);
@@ -51,6 +52,16 @@ export function orderedOperatorTemplates(operatorCatalog) {
     .filter((template) => !defaultIds.has(template.id))
     .sort((a, b) => a.class.localeCompare(b.class) || a.name.localeCompare(b.name));
   return [...defaults, ...custom];
+}
+
+export function importMapJsonIntoList(maps, jsonText) {
+  const rawMap = typeof jsonText === 'string' ? JSON.parse(jsonText) : jsonText;
+  const map = normalizeMap(rawMap);
+  return {
+    maps: [...maps, map],
+    mapIndex: maps.length,
+    map
+  };
 }
 
 export function buildSkillPanelModel(operator) {
@@ -163,6 +174,8 @@ export class UIController {
     this.controlPanel = this.root.querySelector('#control-panel');
     this.resultModal = this.root.querySelector('#result-modal');
     this.mapSelect = this.root.querySelector('#map-select');
+    this.mapImportButton = this.root.querySelector('#map-import-button');
+    this.mapImportInput = this.root.querySelector('#map-import-input');
     this.startButton = this.root.querySelector('#start-button');
     this.pauseButton = this.root.querySelector('#pause-button');
     this.restartButton = this.root.querySelector('#restart-button');
@@ -176,6 +189,26 @@ export class UIController {
       this.createGame(this.maps[this.mapIndex]);
       this.message = '';
       this.sync();
+    });
+
+    this.mapImportButton?.addEventListener('click', () => {
+      this.mapImportInput?.click();
+    });
+
+    this.mapImportInput?.addEventListener('change', async () => {
+      const file = this.mapImportInput.files?.[0];
+      if (!file) {
+        return;
+      }
+      try {
+        const text = await file.text();
+        this.importMapJson(text);
+      } catch (error) {
+        this.message = `地图导入失败：${error.message}`;
+        this.sync();
+      } finally {
+        this.mapImportInput.value = '';
+      }
     });
 
     this.startButton.addEventListener('click', () => {
@@ -272,6 +305,17 @@ export class UIController {
         this.sync();
       }
     });
+  }
+
+  importMapJson(jsonText) {
+    const imported = importMapJsonIntoList(this.maps, jsonText);
+    this.maps = imported.maps;
+    this.mapIndex = imported.mapIndex;
+    this.renderKeys = {};
+    this.message = `已导入地图：${imported.map.name}`;
+    this.createGame(imported.map);
+    this.sync();
+    return imported.map;
   }
 
   sync() {

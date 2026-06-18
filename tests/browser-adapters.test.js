@@ -5,7 +5,8 @@ import {
   buildOperatorDeckModel,
   buildRenderKeys,
   buildSkillPanelModel,
-  formatBattleTime
+  formatBattleTime,
+  importMapJsonIntoList
 } from '../src/ui/UIController.js';
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
 import { DEFAULT_ENEMIES } from '../src/data/defaultEnemies.js';
@@ -83,6 +84,30 @@ test('buildEnemyOptionsModel includes custom enemies and missing selected ids', 
 
   assert.equal(options.some((option) => option.id === 'custom-heavy' && option.label === '自定义重甲'), true);
   assert.equal(options.some((option) => option.id === 'missing-enemy' && option.missing), true);
+});
+
+test('importMapJsonIntoList normalizes and appends imported map JSON', () => {
+  const initial = [{ id: 'existing', name: 'Existing Map' }];
+  const result = importMapJsonIntoList(initial, JSON.stringify({
+    version: '1.0',
+    id: 'imported-map',
+    name: '导入地图',
+    width: 2,
+    height: 1,
+    initialCost: 15,
+    maxCost: 30,
+    maxLives: 5,
+    totalWaves: 1,
+    grid: [['path', 'path']],
+    path: [{ x: 0, y: 0 }, { x: 1, y: 0 }],
+    timeline: [{ wave: 1, startTime: 0, enemyType: 'infantry', count: 1 }]
+  }));
+
+  assert.equal(result.maps.length, 2);
+  assert.equal(result.mapIndex, 1);
+  assert.equal(result.map.version, '2.0');
+  assert.equal(result.map.name, '导入地图');
+  assert.equal(result.maps[0], initial[0]);
 });
 
 test('formatBattleTime renders minute and second clock', () => {
