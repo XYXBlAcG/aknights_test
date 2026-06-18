@@ -378,3 +378,22 @@ test('wave warnings are unique for duplicate timeline entries', () => {
   assert.equal(warnings.length, 2);
   assert.equal(new Set(warnings.map((warning) => warning.id)).size, 2);
 });
+
+test('selecting the same operator type twice cancels deck selection', () => {
+  const game = new Game({ map, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+
+  game.selectOperator('vanguard');
+  game.toggleOperatorSelection('vanguard');
+
+  assert.equal(game.getState().selectedOperatorType, null);
+});
+
+test('map deploy limit overrides global deploy limit', () => {
+  const limitedMap = { ...map, deployLimit: 1, initialCost: 30 };
+  const game = new Game({ map: limitedMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+
+  assert.equal(game.deployOperator('vanguard', { x: 0, y: 0 }).ok, true);
+  assert.equal(game.canDeploy('guard', { x: 1, y: 0 }).ok, false);
+  assert.match(game.canDeploy('guard', { x: 1, y: 0 }).reason, /Total deploy limit/);
+  assert.equal(game.getState().deployLimit, 1);
+});

@@ -10,7 +10,14 @@ export function formatBattleTime(seconds) {
   return `${minutes}:${remainder}`;
 }
 
-export function buildOperatorDeckModel({ operatorCatalog, operators, cost, selectedOperatorType }) {
+export function buildOperatorDeckModel({
+  operatorCatalog,
+  operators,
+  cost,
+  selectedOperatorType,
+  redeployCooldowns = {},
+  deployLimit = TOTAL_DEPLOY_LIMIT
+}) {
   const deployedByClass = operators.reduce((counts, operator) => {
     counts[operator.class] = (counts[operator.class] ?? 0) + 1;
     return counts;
@@ -20,11 +27,14 @@ export function buildOperatorDeckModel({ operatorCatalog, operators, cost, selec
     const id = template.id;
     const classLimit = CLASS_LIMITS[template.class] ?? TOTAL_DEPLOY_LIMIT;
     const classCount = deployedByClass[template.class] ?? 0;
-    const totalFull = operators.length >= TOTAL_DEPLOY_LIMIT;
+    const totalFull = operators.length >= deployLimit;
     const classFull = classCount >= classLimit;
     const unaffordable = cost < template.cost;
+    const cooldownRemaining = Math.ceil(redeployCooldowns?.[id] ?? 0);
     let disabledReason = '';
-    if (unaffordable) {
+    if (cooldownRemaining > 0) {
+      disabledReason = `再部署 ${cooldownRemaining}s`;
+    } else if (unaffordable) {
       disabledReason = '费用不足';
     } else if (totalFull) {
       disabledReason = '部署上限';
@@ -38,6 +48,7 @@ export function buildOperatorDeckModel({ operatorCatalog, operators, cost, selec
       limit: classLimit,
       disabled: Boolean(disabledReason),
       disabledReason,
+      cooldownRemaining,
       selected: selectedOperatorType === id
     };
   });
@@ -80,6 +91,19 @@ export function buildSkillPanelModel(operator) {
   }));
 }
 
+export function buildOperatorSpBarModel(operator) {
+  const skills = operator?.skills ?? [operator?.skill].filter(Boolean);
+  const skill = skills.find((item) => (item.triggerMode ?? 'manual') !== 'auto') ?? skills[0];
+  if (!skill) {
+    return { visible: false, ratio: 0, ready: false };
+  }
+  return {
+    visible: true,
+    ratio: Math.max(0, Math.min(1, skill.sp / skill.spCost)),
+    ready: skill.sp >= skill.spCost
+  };
+}
+
 export function buildRenderKeys(state, message = '') {
   const selected = state.operators.find((operator) => operator.id === state.selectedOperatorId);
   const operatorDeckData = buildOperatorDeckModel(state).map((operator) => [
@@ -88,8 +112,10 @@ export function buildRenderKeys(state, message = '') {
     operator.limit,
     operator.disabled,
     operator.disabledReason,
+    operator.cooldownRemaining,
     operator.selected
   ]);
+  const deployLimit = state.deployLimit ?? TOTAL_DEPLOY_LIMIT;
   const skills = buildSkillPanelModel(selected);
 
   return {
@@ -100,6 +126,8 @@ export function buildRenderKeys(state, message = '') {
       state.maxLives,
       state.currentWave,
       state.totalWaves,
+      state.operators.length,
+      deployLimit,
       formatBattleTime(state.elapsed),
       state.map.name,
       message
@@ -109,6 +137,7 @@ export function buildRenderKeys(state, message = '') {
       state.cost,
       state.selectedOperatorType,
       state.operators.length,
+      deployLimit,
       operatorDeckData
     ]),
     infoPanel: selected ? JSON.stringify([
@@ -253,9 +282,9 @@ export class UIController {
         return;
       }
       event.preventDefault();
-      this.game.selectOperator(button.dataset.operatorId);
+      const result = this.game.toggleOperatorSelection(button.dataset.operatorId);
       this.pendingDeployment = null;
-      this.message = `${button.dataset.operatorName} 待部署`;
+      this.message = result.canceled ? '已取消部署选择' : `${button.dataset.operatorName} 待部署`;
       this.sync();
     });
 
@@ -442,6 +471,7 @@ export class UIController {
     this.topStatus.innerHTML = `
       <div class="status-item accent">COST <strong>${state.cost}/${state.maxCost}</strong></div>
       <div class="status-item">LIFE <strong>${state.lives}/${state.maxLives}</strong></div>
+      <div class="status-item">DEPLOY <strong>${state.operators.length}/${state.deployLimit}</strong></div>
       <div class="status-item">WAVE <strong>${state.currentWave}/${state.totalWaves}</strong></div>
       <div class="status-item">TIME <strong>${formatBattleTime(state.elapsed)}</strong></div>
       <div class="status-item map-name">${state.map.name}</div>

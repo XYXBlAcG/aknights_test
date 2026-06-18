@@ -4,6 +4,7 @@ import { calculateCanvasMetrics, rangeCellsFor, tileColorForType } from '../src/
 import {
   buildOperatorDeckModel,
   buildRenderKeys,
+  buildOperatorSpBarModel,
   buildSkillPanelModel,
   formatBattleTime,
   importMapJsonIntoList
@@ -265,4 +266,32 @@ test('render keys ignore transient effect-only changes', () => {
   assert.equal(after.topStatus, before.topStatus);
   assert.equal(after.operatorDeck, before.operatorDeck);
   assert.equal(after.infoPanel, before.infoPanel);
+});
+
+test('operator deck model exposes redeploy cooldown and deploy limit', () => {
+  const model = buildOperatorDeckModel({
+    operatorCatalog: DEFAULT_OPERATORS,
+    operators: [],
+    cost: 30,
+    selectedOperatorType: null,
+    redeployCooldowns: { vanguard: 7.4 },
+    deployLimit: 8
+  });
+
+  const vanguard = model.find((operator) => operator.id === 'vanguard');
+  assert.equal(vanguard.disabled, true);
+  assert.equal(vanguard.disabledReason, '再部署 8s');
+  assert.equal(vanguard.cooldownRemaining, 8);
+});
+
+test('operator battlefield model exposes first skill sp ratio', () => {
+  const operator = {
+    skills: [{ id: 'skill', sp: 5, spCost: 10, triggerMode: 'manual' }]
+  };
+
+  assert.deepEqual(buildOperatorSpBarModel(operator), {
+    visible: true,
+    ratio: 0.5,
+    ready: false
+  });
 });

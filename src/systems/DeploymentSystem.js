@@ -17,8 +17,10 @@ export class DeploymentSystem {
     this.costSystem = costSystem;
     this.operatorCatalog = operatorCatalog;
     this.operators = [];
-    this.totalLimit = TOTAL_DEPLOY_LIMIT;
+    this.totalLimit = map.deployLimit ?? TOTAL_DEPLOY_LIMIT;
     this.classLimits = CLASS_LIMITS;
+    this.redeployCooldowns = {};
+    this.redeployCooldownSeconds = map.redeployCooldownSeconds ?? 10;
   }
 
   canDeploy(operatorType, cell) {
@@ -49,6 +51,11 @@ export class DeploymentSystem {
     const classLimit = this.classLimits[template.class] ?? this.totalLimit;
     if (classCount >= classLimit) {
       return { ok: false, reason: `${template.className} deploy limit reached` };
+    }
+
+    const cooldown = this.redeployCooldowns[operatorType] ?? 0;
+    if (cooldown > 0) {
+      return { ok: false, reason: `Redeploy cooldown ${Math.ceil(cooldown)}s` };
     }
 
     if (!this.costSystem.canSpend(template.cost)) {
@@ -84,7 +91,19 @@ export class DeploymentSystem {
     });
     operator.blockedEnemies = [];
     this.costSystem.refund(Math.floor(operator.cost * 0.5));
+    this.redeployCooldowns[operator.templateId] = this.redeployCooldownSeconds;
     return { ok: true, operator };
+  }
+
+  tickCooldowns(deltaSeconds) {
+    Object.entries(this.redeployCooldowns).forEach(([templateId, remaining]) => {
+      const next = Math.max(0, remaining - deltaSeconds);
+      if (next <= 0) {
+        delete this.redeployCooldowns[templateId];
+      } else {
+        this.redeployCooldowns[templateId] = next;
+      }
+    });
   }
 
   getOperatorAt(cell) {

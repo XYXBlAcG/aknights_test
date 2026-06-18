@@ -47,3 +47,18 @@ test('vanguard passive restores two cost every three seconds', () => {
   cost.tick(0.2, deployment.operators);
   assert.equal(cost.current, 5);
 });
+
+test('retreat starts template redeploy cooldown and blocks redeploy', () => {
+  const cost = createCostSystem({ initialCost: 30, maxCost: 30 });
+  const deployment = createDeploymentSystem({ map, costSystem: cost, operatorCatalog: DEFAULT_OPERATORS });
+  const placed = deployment.deploy('vanguard', { x: 0, y: 0 });
+
+  deployment.retreat(placed.operator.id);
+
+  assert.equal(deployment.canDeploy('vanguard', { x: 0, y: 0 }).ok, false);
+  assert.match(deployment.canDeploy('vanguard', { x: 0, y: 0 }).reason, /Redeploy cooldown/);
+
+  deployment.tickCooldowns(10);
+
+  assert.equal(deployment.canDeploy('vanguard', { x: 0, y: 0 }).ok, true);
+});

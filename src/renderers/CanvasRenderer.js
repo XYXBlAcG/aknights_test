@@ -1,4 +1,5 @@
 import { DEFAULT_OPERATORS } from '../data/defaultOperators.js';
+import { buildOperatorSpBarModel } from '../ui/UIController.js';
 import { hasReadyManualSkill } from '../systems/SkillSystem.js';
 import { gridToCenter, pixelToGrid } from '../utils/GridMath.js';
 import { rangeCellsFor as getRangeCellsFor } from '../utils/RangeMath.js';
@@ -328,6 +329,10 @@ export class CanvasRenderer {
       ctx.fillText(operator.className.slice(0, 1), x, y);
 
       this.drawHpBar(ctx, operator, x - radius, y + radius + 4, radius * 2, 5);
+      const spBar = buildOperatorSpBarModel(operator);
+      if (spBar.visible) {
+        this.drawRatioBar(ctx, x - radius, y + radius + 11, radius * 2, 4, spBar.ratio, spBar.ready ? '#f6c445' : '#5fc9ff');
+      }
     });
   }
 
@@ -433,10 +438,15 @@ export class CanvasRenderer {
   }
 
   drawHpBar(ctx, unit, x, y, width, height) {
+    const hpRatio = unit.hp / unit.maxHp;
+    this.drawRatioBar(ctx, x, y, width, height, hpRatio, hpRatio > 0.45 ? '#72e0a6' : '#ec5757');
+  }
+
+  drawRatioBar(ctx, x, y, width, height, ratio, color) {
     ctx.fillStyle = '#111821';
     ctx.fillRect(x, y, width, height);
-    ctx.fillStyle = unit.hp / unit.maxHp > 0.45 ? '#72e0a6' : '#ec5757';
-    ctx.fillRect(x, y, width * Math.max(0, unit.hp / unit.maxHp), height);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, width * Math.max(0, Math.min(1, ratio)), height);
   }
 
   resizeCanvas() {

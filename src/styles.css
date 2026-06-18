@@ -88,9 +88,11 @@ button:disabled {
   gap: 8px;
   align-items: center;
   min-width: 0;
+  overflow-x: auto;
 }
 
 .status-item {
+  flex: 0 0 auto;
   min-width: 82px;
   padding: 6px 8px;
   border: 1px solid #2a3644;
@@ -116,6 +118,7 @@ button:disabled {
 }
 
 .status-message {
+  flex: 1 1 120px;
   min-width: 0;
   color: #72e0a6;
   overflow: hidden;

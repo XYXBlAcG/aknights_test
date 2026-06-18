@@ -116,6 +116,14 @@ export class Game {
     return { ok: true };
   }
 
+  toggleOperatorSelection(operatorType) {
+    if (this.selectedOperatorType === operatorType) {
+      this.clearSelection();
+      return { ok: true, canceled: true };
+    }
+    return this.selectOperator(operatorType);
+  }
+
   clearSelection() {
     this.restoreSpeedAfterInspection();
     this.selectedOperatorType = null;
@@ -213,6 +221,7 @@ export class Game {
     });
 
     this.costSystem.tick(scaledDelta, this.deploymentSystem.operators);
+    this.deploymentSystem.tickCooldowns(scaledDelta);
     tickOperatorSkills(scaledDelta, this.deploymentSystem.operators, {
       costSystem: this.costSystem,
       operators: this.deploymentSystem.operators
@@ -292,7 +301,9 @@ export class Game {
       operatorCatalog: this.operatorCatalog,
       selectedOperatorType: this.selectedOperatorType,
       selectedOperatorId: this.selectedOperatorId,
-      hoverCell: this.hoverCell
+      hoverCell: this.hoverCell,
+      redeployCooldowns: { ...this.deploymentSystem.redeployCooldowns },
+      deployLimit: this.deploymentSystem.totalLimit
     };
   }
 
