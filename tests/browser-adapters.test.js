@@ -233,3 +233,36 @@ test('buildRenderKeys keeps interactive regions stable across frame-only changes
   assert.equal(after.infoPanel, before.infoPanel);
   assert.equal(after.controls, before.controls);
 });
+
+test('render keys ignore transient effect-only changes', () => {
+  const state = {
+    map: { name: 'Effect Map' },
+    cost: 10,
+    maxCost: 30,
+    lives: 3,
+    maxLives: 3,
+    currentWave: 1,
+    totalWaves: 1,
+    elapsed: 1,
+    status: 'running',
+    speed: 1,
+    operators: [],
+    enemies: [],
+    operatorCatalog: DEFAULT_OPERATORS,
+    selectedOperatorType: null,
+    selectedOperatorId: null,
+    kills: 0,
+    leaks: 0,
+    stars: 0,
+    effects: []
+  };
+  const before = buildRenderKeys(state, '');
+  const after = buildRenderKeys({
+    ...state,
+    effects: [{ id: 'effect-1', type: 'wave_warning', elapsed: 0, duration: 2, payload: {} }]
+  }, '');
+
+  assert.equal(after.topStatus, before.topStatus);
+  assert.equal(after.operatorDeck, before.operatorDeck);
+  assert.equal(after.infoPanel, before.infoPanel);
+});

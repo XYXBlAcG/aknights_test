@@ -44,6 +44,29 @@ export class WaveSystem {
     return this.spawnIndex >= this.schedule.length;
   }
 
+  warningsDue(windowSeconds) {
+    const minTime = this.elapsed;
+    const maxTime = this.elapsed + windowSeconds;
+    const seen = new Set();
+    return this.schedule
+      .filter((spawn) => spawn.eventStartTime > minTime && spawn.eventStartTime <= maxTime)
+      .filter((spawn) => {
+        if (seen.has(spawn.eventId)) {
+          return false;
+        }
+        seen.add(spawn.eventId);
+        return true;
+      })
+      .map((spawn) => ({
+        id: spawn.eventId,
+        wave: spawn.wave,
+        enemyType: spawn.enemyType,
+        pathId: spawn.pathId,
+        count: spawn.count,
+        startTime: spawn.eventStartTime
+      }));
+  }
+
   reset() {
     this.elapsed = 0;
     this.spawnIndex = 0;
@@ -57,9 +80,12 @@ function expandTimeline(timeline) {
     .flatMap((event) => {
       const interval = event.interval ?? 0.8;
       return Array.from({ length: event.count }, (_, index) => ({
+        eventId: `${event.wave}:${event.startTime}:${event.enemyType}:${event.pathId}`,
         wave: event.wave,
         enemyType: event.enemyType,
         pathId: event.pathId,
+        count: event.count,
+        eventStartTime: event.startTime,
         spawnTime: event.startTime + interval * index
       }));
     })

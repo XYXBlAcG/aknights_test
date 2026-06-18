@@ -305,3 +305,38 @@ test('multi-phase enemy rewards cost only after final phase death', () => {
   assert.equal(game.getState().kills, 1);
   assert.equal(game.getState().cost, initialCost + 9);
 });
+
+test('game emits route warning before scheduled enemy spawn', () => {
+  const warningMap = {
+    ...map,
+    timeline: [{ wave: 1, startTime: 2, enemyType: 'infantry', count: 1, interval: 0.1, pathId: 'main' }],
+    waveWarningSeconds: 1
+  };
+  const game = new Game({ map: warningMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+
+  game.start();
+  game.tick(1.1);
+
+  const effects = game.getState().effects;
+  assert.equal(effects.some((effect) => effect.type === 'wave_warning' && effect.payload.pathId === 'main'), true);
+});
+
+test('game emits attack and death effects during combat', () => {
+  const effectMap = { ...map, initialCost: 30, maxCost: 50, timeline: [] };
+  const game = new Game({ map: effectMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+  const guard = game.deployOperator('guard', { x: 0, y: 0 }).operator;
+  const enemy = new Enemy({ ...DEFAULT_ENEMIES.infantry, maxHp: 1 }, { pathId: 'main' });
+  enemy.cell = { x: 0, y: 0 };
+  enemy.x = 0;
+  enemy.y = 0;
+  enemy.blockedBy = guard.id;
+  guard.blockedEnemies = [enemy];
+  game.enemies.push(enemy);
+
+  game.start();
+  game.tick(1.2);
+
+  const types = game.getState().effects.map((effect) => effect.type);
+  assert.equal(types.includes('operator_attack'), true);
+  assert.equal(types.includes('enemy_death'), true);
+});

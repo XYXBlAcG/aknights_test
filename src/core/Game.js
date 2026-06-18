@@ -7,7 +7,13 @@ import { createBlockingSystem } from '../systems/BlockingSystem.js';
 import { createCombatSystem } from '../systems/CombatSystem.js';
 import { createCostSystem } from '../systems/CostSystem.js';
 import { createDeploymentSystem } from '../systems/DeploymentSystem.js';
-import { createEffectSystem } from '../systems/EffectSystem.js';
+import {
+  createEnemyAttackEffect,
+  createEnemyDeathEffect,
+  createEffectSystem,
+  createOperatorAttackEffect,
+  createWaveWarningEffect
+} from '../systems/EffectSystem.js';
 import { createWaveSystem } from '../systems/WaveSystem.js';
 import { evaluateBattleResult } from '../systems/WinLoseSystem.js';
 import { activateOperatorSkill, tickOperatorSkills } from '../systems/SkillSystem.js';
@@ -54,6 +60,7 @@ export class Game {
     this.blockingSystem = createBlockingSystem();
     this.combatSystem = createCombatSystem();
     this.effectSystem = createEffectSystem();
+    this.warnedWaveEvents = new Set();
     this.enemies = [];
     this.status = 'ready';
     this.lives = this.map.maxLives;
@@ -186,6 +193,18 @@ export class Game {
     this.effectSystem.tick(scaledDelta);
     this.elapsed += scaledDelta;
 
+    const waveWarningSeconds = this.map.waveWarningSeconds ?? 2;
+    this.waveSystem.warningsDue(waveWarningSeconds + scaledDelta).forEach((warning) => {
+      if (this.warnedWaveEvents.has(warning.id)) {
+        return;
+      }
+      this.warnedWaveEvents.add(warning.id);
+      this.effectSystem.add(createWaveWarningEffect({
+        ...warning,
+        duration: waveWarningSeconds
+      }));
+    });
+
     const waveResult = this.waveSystem.tick(scaledDelta);
     this.currentWave = Math.max(this.currentWave, waveResult.currentWave);
     waveResult.spawned.forEach((enemy) => {
@@ -202,11 +221,12 @@ export class Game {
     this.moveEnemies(scaledDelta);
     this.blockingSystem.update(this.deploymentSystem.operators, this.enemies);
 
-    this.combatSystem.tick(scaledDelta, {
+    const combatResult = this.combatSystem.tick(scaledDelta, {
       operators: this.deploymentSystem.operators,
       enemies: this.enemies,
       onEnemyKilled: (enemy) => this.handleEnemyKilled(enemy)
     });
+    this.addCombatEffects(combatResult);
 
     this.enemies = this.enemies.filter((enemy) => !enemy.isDead && !enemy.reachedExit);
     this.deploymentSystem.operators = this.deploymentSystem.operators.filter((operator) => !operator.isDead);
@@ -216,6 +236,30 @@ export class Game {
     this.blockingSystem.update(this.deploymentSystem.operators, this.enemies);
     this.evaluateResult();
     return this.getState();
+  }
+
+  addCombatEffects(result) {
+    result.attacks?.forEach((attack) => {
+      this.effectSystem.add(createOperatorAttackEffect({
+        source: attack.source.cell,
+        target: attack.target.cell,
+        color: attack.source.color
+      }));
+    });
+    result.enemyAttacks?.forEach((attack) => {
+      this.effectSystem.add(createEnemyAttackEffect({
+        source: attack.source.cell,
+        target: attack.target.cell,
+        color: attack.source.color
+      }));
+    });
+    [...(result.killedEnemies ?? []), ...(result.phaseChangedEnemies ?? [])].forEach((enemy) => {
+      this.effectSystem.add(createEnemyDeathEffect({
+        cell: enemy.cell,
+        color: enemy.color,
+        phaseBreak: !enemy.isDead
+      }));
+    });
   }
 
   getState() {

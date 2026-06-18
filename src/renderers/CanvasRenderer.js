@@ -146,7 +146,122 @@ export class CanvasRenderer {
       if (!effect?.type) {
         return;
       }
+      if (effect.type === 'wave_warning') {
+        this.drawWaveWarningEffect(ctx, effect, state);
+      }
+      if (effect.type === 'operator_attack' || effect.type === 'enemy_attack') {
+        this.drawAttackEffect(ctx, effect);
+      }
+      if (effect.type === 'enemy_death') {
+        this.drawDeathEffect(ctx, effect);
+      }
     });
+  }
+
+  drawWaveWarningEffect(ctx, effect, state) {
+    const pathId = effect?.payload?.pathId;
+    const path = state?.map?.paths?.find((candidate) => candidate.id === pathId);
+    if (!this.metrics || !Array.isArray(path?.points) || path.points.length === 0) {
+      return;
+    }
+
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    const progress = effectProgress(effect);
+    const pulse = Math.sin(progress * Math.PI);
+    ctx.save();
+    ctx.strokeStyle = effectColor(effect.payload?.color, '#f6c445');
+    ctx.fillStyle = effectColor(effect.payload?.color, '#f6c445');
+    ctx.globalAlpha = 0.3 + pulse * 0.45;
+    ctx.lineWidth = Math.max(3, tileSize * 0.08) + pulse * Math.max(2, tileSize * 0.03);
+    ctx.lineCap = 'round';
+    if (typeof ctx.setLineDash === 'function') {
+      ctx.setLineDash([Math.max(6, tileSize * 0.18), Math.max(5, tileSize * 0.12)]);
+    }
+    ctx.beginPath();
+    path.points.forEach((point, index) => {
+      const center = gridToCenter(point, tileSize);
+      const x = offsetX + center.x;
+      const y = offsetY + center.y;
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+    if (typeof ctx.setLineDash === 'function') {
+      ctx.setLineDash([]);
+    }
+
+    const start = gridToCenter(path.points[0], tileSize);
+    ctx.globalAlpha = 0.22 + pulse * 0.32;
+    ctx.beginPath();
+    ctx.arc(offsetX + start.x, offsetY + start.y, tileSize * (0.24 + pulse * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawAttackEffect(ctx, effect) {
+    const source = effect?.payload?.source;
+    const target = effect?.payload?.target;
+    if (!this.metrics || !isGridCell(source) || !isGridCell(target)) {
+      return;
+    }
+
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    const progress = effectProgress(effect);
+    const sourceCenter = gridToCenter(source, tileSize);
+    const targetCenter = gridToCenter(target, tileSize);
+    const sourceX = offsetX + sourceCenter.x;
+    const sourceY = offsetY + sourceCenter.y;
+    const targetX = offsetX + targetCenter.x;
+    const targetY = offsetY + targetCenter.y;
+    const color = effectColor(effect.payload?.color, effect.type === 'enemy_attack' ? '#ec5757' : '#f6c445');
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = Math.max(0.12, 1 - progress);
+    ctx.lineWidth = Math.max(2, tileSize * 0.045);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(sourceX, sourceY);
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+    ctx.globalAlpha = Math.max(0.08, 0.55 - progress * 0.45);
+    ctx.beginPath();
+    ctx.arc(targetX, targetY, tileSize * (0.12 + progress * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawDeathEffect(ctx, effect) {
+    const cell = effect?.payload?.cell;
+    if (!this.metrics || !isGridCell(cell)) {
+      return;
+    }
+
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    const progress = effectProgress(effect);
+    const center = gridToCenter(cell, tileSize);
+    const x = offsetX + center.x;
+    const y = offsetY + center.y;
+    const color = effectColor(effect.payload?.color, '#e15f5f');
+    const radius = tileSize * (0.16 + progress * 0.42);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = Math.max(0, 0.7 - progress * 0.62);
+    ctx.lineWidth = effect.payload?.phaseBreak ? Math.max(3, tileSize * 0.06) : Math.max(2, tileSize * 0.045);
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = Math.max(0, 0.16 - progress * 0.14);
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   drawDeploymentPreview(ctx, state) {
@@ -353,4 +468,21 @@ function directionVector(direction) {
     return { x: -1, y: 0 };
   }
   return { x: 1, y: 0 };
+}
+
+function effectProgress(effect) {
+  const elapsed = Number(effect?.elapsed);
+  const duration = Number(effect?.duration);
+  if (!Number.isFinite(elapsed) || !Number.isFinite(duration) || duration <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, elapsed / duration));
+}
+
+function effectColor(color, fallback) {
+  return typeof color === 'string' && color.length > 0 ? color : fallback;
+}
+
+function isGridCell(cell) {
+  return Number.isFinite(cell?.x) && Number.isFinite(cell?.y);
 }
