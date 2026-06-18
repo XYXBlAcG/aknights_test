@@ -1,4 +1,5 @@
 import { DEFAULT_OPERATORS } from '../data/defaultOperators.js';
+import { hasReadyManualSkill } from '../systems/SkillSystem.js';
 import { gridToCenter, pixelToGrid } from '../utils/GridMath.js';
 import { rangeCellsFor as getRangeCellsFor } from '../utils/RangeMath.js';
 
@@ -56,6 +57,7 @@ export class CanvasRenderer {
     this.drawPaths(ctx, state);
     this.drawDeploymentPreview(ctx, state);
     this.drawSelectedRange(ctx, state);
+    this.drawDeploymentDirectionPrompt(ctx, state);
     this.drawOperators(ctx, state);
     this.drawEnemies(ctx, state);
     ctx.restore();
@@ -73,6 +75,19 @@ export class CanvasRenderer {
       y: point.y - metrics.offsetY
     };
     return pixelToGrid(local, metrics.tileSize);
+  }
+
+  directionFromEvent(event, map, cell) {
+    const rect = this.canvas.getBoundingClientRect();
+    const metrics = this.metrics ?? calculateCanvasMetrics(map, rect.width, rect.height);
+    const localX = event.clientX - rect.left - metrics.offsetX - cell.x * metrics.tileSize;
+    const localY = event.clientY - rect.top - metrics.offsetY - cell.y * metrics.tileSize;
+    const dx = localX - metrics.tileSize / 2;
+    const dy = localY - metrics.tileSize / 2;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      return dx >= 0 ? 'right' : 'left';
+    }
+    return dy >= 0 ? 'down' : 'up';
   }
 
   drawBackground(ctx, width, height) {
@@ -126,11 +141,12 @@ export class CanvasRenderer {
   }
 
   drawDeploymentPreview(ctx, state) {
-    if (!state.selectedOperatorType) {
+    if (!state.selectedOperatorType && !state.pendingDeployment) {
       return;
     }
 
-    const template = state.operatorCatalog[state.selectedOperatorType] ?? DEFAULT_OPERATORS[state.selectedOperatorType];
+    const operatorType = state.pendingDeployment?.operatorType ?? state.selectedOperatorType;
+    const template = state.operatorCatalog[operatorType] ?? DEFAULT_OPERATORS[operatorType];
     if (!template) {
       return;
     }
@@ -153,8 +169,10 @@ export class CanvasRenderer {
       });
     });
 
-    if (state.hoverCell) {
-      this.drawRangeCells(ctx, state.hoverCell, template.range, legalRangeColor(template.deployType));
+    const previewCell = state.pendingDeployment?.cell ?? state.hoverCell;
+    const previewDirection = state.pendingDeployment?.direction ?? 'right';
+    if (previewCell) {
+      this.drawRangeCells(ctx, previewCell, template.range, legalRangeColor(template.deployType), previewDirection);
     }
   }
 
@@ -173,6 +191,11 @@ export class CanvasRenderer {
       ctx.strokeStyle = state.selectedOperatorId === operator.id ? '#ffffff' : '#10141b';
       ctx.lineWidth = state.selectedOperatorId === operator.id ? 3 : 2;
       ctx.stroke();
+
+      this.drawDirectionMarker(ctx, x, y, radius, operator.direction);
+      if (hasReadyManualSkill(operator)) {
+        this.drawReadySkillMarker(ctx, x, y, radius);
+      }
 
       ctx.fillStyle = '#061015';
       ctx.font = `700 ${Math.max(10, tileSize * 0.18)}px Inter, sans-serif`;
@@ -213,20 +236,76 @@ export class CanvasRenderer {
   drawSelectedRange(ctx, state) {
     const selected = state.operators.find((operator) => operator.id === state.selectedOperatorId);
     if (selected) {
-      this.drawRangeCells(ctx, selected.cell, selected.range, 'rgba(246, 196, 69, 0.18)');
+      this.drawRangeCells(ctx, selected.cell, selected.range, 'rgba(246, 196, 69, 0.18)', selected.direction);
     }
   }
 
-  drawRangeCells(ctx, origin, range, fillStyle) {
+  drawRangeCells(ctx, origin, range, fillStyle, direction = 'right') {
     if (!origin || !range) {
       return;
     }
 
     const { tileSize, offsetX, offsetY } = this.metrics;
-    getRangeCellsFor(origin, range).forEach((cell) => {
+    getRangeCellsFor(origin, range, direction).forEach((cell) => {
       ctx.fillStyle = fillStyle;
       ctx.fillRect(offsetX + cell.x * tileSize + 3, offsetY + cell.y * tileSize + 3, tileSize - 6, tileSize - 6);
     });
+  }
+
+  drawDeploymentDirectionPrompt(ctx, state) {
+    const pending = state.pendingDeployment;
+    if (!pending) {
+      return;
+    }
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    const center = gridToCenter(pending.cell, tileSize);
+    const x = offsetX + center.x;
+    const y = offsetY + center.y;
+    const radius = tileSize * 0.42;
+    ctx.save();
+    ctx.strokeStyle = '#f6c445';
+    ctx.fillStyle = 'rgba(246, 196, 69, 0.2)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ['up', 'right', 'down', 'left'].forEach((direction) => {
+      this.drawDirectionMarker(ctx, x, y, radius + tileSize * 0.1, direction, '#f6c445');
+    });
+    ctx.restore();
+  }
+
+  drawDirectionMarker(ctx, x, y, radius, direction = 'right', color = '#ffffff') {
+    const vector = directionVector(direction);
+    const tipX = x + vector.x * radius;
+    const tipY = y + vector.y * radius;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + vector.x * radius * 0.35, y + vector.y * radius * 0.35);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawReadySkillMarker(ctx, x, y, radius) {
+    ctx.save();
+    ctx.strokeStyle = '#f6c445';
+    ctx.fillStyle = '#f6c445';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x + radius * 0.72, y - radius * 0.72, Math.max(4, radius * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawHpBar(ctx, unit, x, y, width, height) {
@@ -252,4 +331,17 @@ export class CanvasRenderer {
 
 function legalRangeColor(deployType) {
   return deployType === 'ground' ? 'rgba(246, 196, 69, 0.16)' : 'rgba(95, 201, 255, 0.16)';
+}
+
+function directionVector(direction) {
+  if (direction === 'up') {
+    return { x: 0, y: -1 };
+  }
+  if (direction === 'down') {
+    return { x: 0, y: 1 };
+  }
+  if (direction === 'left') {
+    return { x: -1, y: 0 };
+  }
+  return { x: 1, y: 0 };
 }

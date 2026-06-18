@@ -107,7 +107,7 @@ function selectAttackTarget(operator, enemies) {
   }
 
   const inRange = liveEnemies.filter((enemy) => {
-    return isCellInRange(operator.cell, enemy.cell, operator.range);
+    return isCellInRange(operator.cell, enemy.cell, operator.range, operator.direction);
   });
 
   if (inRange.length === 0) {
@@ -130,7 +130,7 @@ function selectHealTarget(operator, operators) {
     return candidate.deployType === 'ground'
       && !candidate.isDead
       && candidate.hp < candidate.maxHp
-      && isCellInRange(operator.cell, candidate.cell, operator.range);
+      && isCellInRange(operator.cell, candidate.cell, operator.range, operator.direction);
   });
 
   if (candidates.length === 0) {

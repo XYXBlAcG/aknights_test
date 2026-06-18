@@ -1,7 +1,9 @@
+import { normalizeDirection } from '../utils/RangeMath.js';
+
 let operatorSequence = 0;
 
 export class Operator {
-  constructor(template, cell) {
+  constructor(template, cell, direction = 'right') {
     operatorSequence += 1;
     this.id = `${template.id}-${operatorSequence}`;
     this.templateId = template.id;
@@ -23,15 +25,11 @@ export class Operator {
     this.range = template.range;
     this.targeting = template.targeting;
     this.trait = template.trait;
-    this.skill = template.skill ? {
-      ...template.skill,
-      effect: template.skill.effect ? { ...template.skill.effect } : {},
-      sp: 0,
-      activeRemaining: 0,
-      nextAttackMultiplier: null
-    } : null;
+    this.skills = (template.skills ?? [template.skill].filter(Boolean)).map(createSkillState);
+    this.skill = this.skills[0] ?? null;
     this.color = template.color;
     this.cell = { x: cell.x, y: cell.y };
+    this.direction = normalizeDirection(direction);
     this.traitTimer = 0;
   }
 
@@ -46,6 +44,18 @@ export class Operator {
   canBlockMore() {
     return this.blockedCount < this.block;
   }
+}
+
+function createSkillState(skill) {
+  return {
+    ...skill,
+    effect: skill.effect ? { ...skill.effect } : {},
+    range: skill.range ? structuredClone(skill.range) : null,
+    triggerMode: skill.triggerMode ?? 'manual',
+    sp: 0,
+    activeRemaining: 0,
+    nextAttackMultiplier: null
+  };
 }
 
 export function resetOperatorSequence() {

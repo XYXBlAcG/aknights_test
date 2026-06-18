@@ -1,32 +1,43 @@
-import { isCellInDiamondRange } from '../utils/GridMath.js';
+import { isCellInRange } from '../utils/RangeMath.js';
 
-export function tickOperatorSkills(deltaSeconds, operators) {
+export function tickOperatorSkills(deltaSeconds, operators, context = {}) {
   operators.forEach((operator) => {
-    if (!operator.skill || operator.isDead) {
+    if (operator.isDead) {
       return;
     }
 
-    if (operator.skill.activeRemaining > 0) {
-      operator.skill.activeRemaining = Math.max(0, operator.skill.activeRemaining - deltaSeconds);
-      return;
-    }
+    getOperatorSkills(operator).forEach((skill) => {
+      if (skill.activeRemaining > 0) {
+        skill.activeRemaining = Math.max(0, skill.activeRemaining - deltaSeconds);
+        return;
+      }
 
-    operator.skill.sp = Math.min(operator.skill.spCost, operator.skill.sp + deltaSeconds);
+      if (skill.nextAttackMultiplier) {
+        return;
+      }
+
+      skill.sp = Math.min(skill.spCost, skill.sp + deltaSeconds);
+      if (skill.triggerMode === 'auto' && skill.sp >= skill.spCost) {
+        activateOperatorSkill(operator, context, skill.id);
+      }
+    });
   });
 }
 
-export function activateOperatorSkill(operator, { costSystem, operators }) {
-  if (!operator?.skill) {
+export function activateOperatorSkill(operator, { costSystem = null, operators = [] } = {}, skillId = null) {
+  const skill = selectSkill(operator, skillId);
+  if (!skill) {
     return { ok: false, reason: '该干员没有可释放技能' };
   }
 
-  if (operator.skill.sp < operator.skill.spCost) {
+  if (skill.sp < skill.spCost) {
     return { ok: false, reason: '技能尚未就绪' };
   }
 
-  const skill = operator.skill;
-
   if (skill.type === 'instant_cost') {
+    if (!costSystem) {
+      return { ok: false, reason: '费用系统不可用' };
+    }
     skill.sp = 0;
     costSystem.add(skill.amount);
     return { ok: true, skill, message: `${operator.name}释放${skill.name}` };
@@ -48,7 +59,7 @@ export function activateOperatorSkill(operator, { costSystem, operators }) {
   }
 
   if (skill.type === 'instant_heal') {
-    const target = selectLowestHpGroundOperator(operator, operators);
+    const target = selectLowestHpGroundOperator(operator, operators, skill);
     if (!target) {
       return { ok: false, reason: '没有可治疗目标' };
     }
@@ -62,41 +73,69 @@ export function activateOperatorSkill(operator, { costSystem, operators }) {
 
 export function getEffectiveAttack(operator) {
   let multiplier = 1;
-  if (operator.skill?.activeRemaining > 0) {
-    multiplier *= operator.skill.effect?.attackMultiplier ?? 1;
-  }
-  if (operator.skill?.nextAttackMultiplier) {
-    multiplier *= operator.skill.nextAttackMultiplier;
-  }
+  getOperatorSkills(operator).forEach((skill) => {
+    if (skill.activeRemaining > 0) {
+      multiplier *= skill.effect?.attackMultiplier ?? 1;
+    }
+    if (skill.nextAttackMultiplier) {
+      multiplier *= skill.nextAttackMultiplier;
+    }
+  });
   return Math.round(operator.attack * multiplier);
 }
 
 export function getEffectiveDefense(operator) {
-  if (operator.skill?.activeRemaining > 0) {
-    return Math.round(operator.defense * (operator.skill.effect?.defenseMultiplier ?? 1));
-  }
-  return operator.defense;
+  const multiplier = getOperatorSkills(operator).reduce((value, skill) => {
+    return skill.activeRemaining > 0 ? value * (skill.effect?.defenseMultiplier ?? 1) : value;
+  }, 1);
+  return Math.round(operator.defense * multiplier);
 }
 
 export function getEffectiveAttackInterval(operator) {
-  if (operator.skill?.activeRemaining > 0) {
-    return operator.attackInterval * (operator.skill.effect?.attackIntervalMultiplier ?? 1);
-  }
-  return operator.attackInterval;
+  return getOperatorSkills(operator).reduce((value, skill) => {
+    return skill.activeRemaining > 0 ? value * (skill.effect?.attackIntervalMultiplier ?? 1) : value;
+  }, operator.attackInterval);
 }
 
 export function consumeNextAttackSkill(operator) {
-  if (operator.skill?.nextAttackMultiplier) {
-    operator.skill.nextAttackMultiplier = null;
-  }
+  getOperatorSkills(operator).forEach((skill) => {
+    if (skill.nextAttackMultiplier) {
+      skill.nextAttackMultiplier = null;
+    }
+  });
 }
 
-function selectLowestHpGroundOperator(source, operators) {
+export function getOperatorSkills(operator) {
+  if (!operator) {
+    return [];
+  }
+  if (operator.skill && (!Array.isArray(operator.skills) || !operator.skills.includes(operator.skill))) {
+    return [operator.skill];
+  }
+  return operator.skills ?? [operator.skill].filter(Boolean);
+}
+
+export function hasReadyManualSkill(operator) {
+  return getOperatorSkills(operator).some((skill) => {
+    return skill.triggerMode !== 'auto' && skill.sp >= skill.spCost && skill.activeRemaining <= 0;
+  });
+}
+
+function selectSkill(operator, skillId = null) {
+  const skills = getOperatorSkills(operator);
+  if (skillId) {
+    return skills.find((skill) => skill.id === skillId) ?? null;
+  }
+  return skills[0] ?? null;
+}
+
+function selectLowestHpGroundOperator(source, operators, skill) {
+  const range = skill.range ?? source.range;
   const candidates = operators.filter((operator) => {
     return operator.deployType === 'ground'
       && !operator.isDead
       && operator.hp < operator.maxHp
-      && isCellInDiamondRange(source.cell, operator.cell, source.skill.rangeRadius ?? source.range?.radius ?? 2.5);
+      && isCellInRange(source.cell, operator.cell, range, source.direction);
   });
 
   return candidates.sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0] ?? null;

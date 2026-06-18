@@ -1,13 +1,18 @@
 import { saveCustomCatalogs } from '../data/CatalogStore.js';
 import {
+  addSkillToSelected,
   applyRangePresetToSelected,
+  applySkillRangePresetToSelected,
   createTemplate,
   deleteSelectedTemplate,
   duplicateTemplate,
   loadCustomCatalogJson,
+  removeSkillFromSelected,
   selectTemplate,
   toCustomCatalogJson,
   toggleRangeCellForSelected,
+  toggleSkillRangeCellForSelected,
+  updateSkillForSelected,
   updateSelectedTemplate
 } from './CustomEditorModel.js';
 
@@ -23,12 +28,28 @@ const NUMBER_FIELDS = new Set([
   'rewardCost'
 ]);
 
+const SKILL_NUMBER_FIELDS = new Set([
+  'spCost',
+  'duration',
+  'amount',
+  'healPercent',
+  'effect.attackMultiplier',
+  'effect.defenseMultiplier',
+  'effect.attackIntervalMultiplier',
+  'effect.nextAttackMultiplier'
+]);
+
 const CHECKBOX_FIELDS = new Set(['canBeBlocked', 'isFlying', 'elite', 'boss']);
+
+export function fieldEditRenderMode({ eventType, tagName }) {
+  return eventType === 'input' && tagName !== 'SELECT' ? 'partial' : 'full';
+}
 
 export class CustomEditorController {
   constructor({ root, initialState }) {
     this.root = root;
     this.state = initialState;
+    this.rangeTarget = { type: 'operator', skillId: null };
     this.cacheElements();
     this.bindEvents();
     this.sync();
@@ -61,6 +82,7 @@ export class CustomEditorController {
         selectedKind: button.dataset.kind,
         selectedId: Object.keys(this.state.data[button.dataset.kind])[0] ?? null
       };
+      this.rangeTarget = { type: 'operator', skillId: null };
       this.sync();
     });
 
@@ -69,6 +91,7 @@ export class CustomEditorController {
       if (!button) {
         return;
       }
+      this.rangeTarget = { type: 'operator', skillId: null };
       this.runMutation(() => selectTemplate(this.state, this.state.selectedKind, button.dataset.templateId));
     });
 
@@ -85,32 +108,65 @@ export class CustomEditorController {
     });
 
     this.form.addEventListener('input', (event) => {
-      const input = event.target.closest('[data-field]');
+      const input = event.target.closest('[data-field], [data-skill-field]');
       if (!input || input.tagName === 'SELECT') {
         return;
       }
-      this.updateField(input);
+      this.updateInput(input, fieldEditRenderMode({ eventType: 'input', tagName: input.tagName }));
     });
 
     this.form.addEventListener('change', (event) => {
-      const input = event.target.closest('[data-field]');
+      const input = event.target.closest('[data-field], [data-skill-field]');
       if (!input) {
         return;
       }
-      this.updateField(input);
+      this.updateInput(input, fieldEditRenderMode({ eventType: 'change', tagName: input.tagName }));
+    });
+
+    this.form.addEventListener('click', (event) => {
+      const addButton = event.target.closest('[data-add-skill]');
+      const removeButton = event.target.closest('[data-remove-skill]');
+      if (addButton) {
+        event.preventDefault();
+        this.runMutation(() => addSkillToSelected(this.state));
+      }
+      if (removeButton) {
+        event.preventDefault();
+        if (this.rangeTarget.skillId === removeButton.dataset.removeSkill) {
+          this.rangeTarget = { type: 'operator', skillId: null };
+        }
+        this.runMutation(() => removeSkillFromSelected(this.state, removeButton.dataset.removeSkill));
+      }
     });
 
     this.rangePanel.addEventListener('click', (event) => {
+      const targetButton = event.target.closest('[data-range-target]');
+      const skillTargetButton = event.target.closest('[data-range-target-skill]');
       const presetButton = event.target.closest('[data-range-preset]');
       const cellButton = event.target.closest('[data-range-cell]');
+      if (targetButton) {
+        this.rangeTarget = { type: 'operator', skillId: null };
+        this.renderRangePanel();
+        return;
+      }
+      if (skillTargetButton) {
+        this.rangeTarget = { type: 'skill', skillId: skillTargetButton.dataset.rangeTargetSkill };
+        this.renderRangePanel();
+        return;
+      }
       if (presetButton) {
-        this.runMutation(() => applyRangePresetToSelected(this.state, presetButton.dataset.rangePreset));
+        this.runMutation(() => this.rangeTarget.type === 'skill'
+          ? applySkillRangePresetToSelected(this.state, this.rangeTarget.skillId, presetButton.dataset.rangePreset)
+          : applyRangePresetToSelected(this.state, presetButton.dataset.rangePreset));
       }
       if (cellButton) {
-        this.runMutation(() => toggleRangeCellForSelected(this.state, {
+        const cell = {
           x: Number(cellButton.dataset.x),
           y: Number(cellButton.dataset.y)
-        }));
+        };
+        this.runMutation(() => this.rangeTarget.type === 'skill'
+          ? toggleSkillRangeCellForSelected(this.state, this.rangeTarget.skillId, cell)
+          : toggleRangeCellForSelected(this.state, cell));
       }
     });
 
@@ -136,25 +192,38 @@ export class CustomEditorController {
     });
   }
 
-  updateField(input) {
-    const field = input.dataset.field;
-    const value = fieldValue(input);
-    this.runMutation(() => updateSelectedTemplate(this.state, { [field]: value }));
+  updateInput(input, renderMode = 'full') {
+    if (input.dataset.skillField) {
+      this.updateSkillField(input, renderMode);
+      return;
+    }
+    this.updateField(input, renderMode);
   }
 
-  runMutation(mutator, successMessage = null) {
+  updateField(input, renderMode = 'full') {
+    const field = input.dataset.field;
+    const value = fieldValue(input);
+    this.runMutation(() => updateSelectedTemplate(this.state, { [field]: value }), null, renderMode);
+  }
+
+  updateSkillField(input, renderMode = 'full') {
+    const patch = skillPatchFromInput(input);
+    this.runMutation(() => updateSkillForSelected(this.state, input.dataset.skillId, patch), null, renderMode);
+  }
+
+  runMutation(mutator, successMessage = null, renderMode = 'full') {
     try {
       this.state = mutator();
       if (successMessage) {
         this.state.message = successMessage;
       }
-      this.sync();
+      this.syncByMode(renderMode);
     } catch (error) {
       this.state = {
         ...this.state,
         message: error.message
       };
-      this.sync();
+      this.syncByMode(renderMode);
     }
   }
 
@@ -183,6 +252,15 @@ export class CustomEditorController {
     this.duplicateButton.disabled = !this.state.selectedId;
     this.deleteButton.disabled = !this.state.selectedId;
     this.message.textContent = this.state.message ?? '';
+  }
+
+  syncByMode(renderMode) {
+    if (renderMode === 'partial') {
+      this.renderValidation();
+      this.message.textContent = this.state.message ?? '';
+      return;
+    }
+    this.sync();
   }
 
   renderTabs() {
@@ -225,7 +303,16 @@ export class CustomEditorController {
       return;
     }
 
-    const active = new Set((selected.range?.cells ?? [{ x: 0, y: 0 }]).map((cell) => `${cell.x},${cell.y}`));
+    const skills = operatorSkills(selected);
+    const skillStillExists = skills.some((skill) => skill.id === this.rangeTarget.skillId);
+    if (this.rangeTarget.type === 'skill' && !skillStillExists) {
+      this.rangeTarget = { type: 'operator', skillId: null };
+    }
+    const selectedSkill = this.rangeTarget.type === 'skill'
+      ? skills.find((skill) => skill.id === this.rangeTarget.skillId)
+      : null;
+    const range = selectedSkill?.range ?? selected.range;
+    const active = new Set((range?.cells ?? [{ x: 0, y: 0 }]).map((cell) => `${cell.x},${cell.y}`));
     const cells = [];
     for (let y = -5; y <= 5; y += 1) {
       for (let x = -5; x <= 5; x += 1) {
@@ -238,6 +325,12 @@ export class CustomEditorController {
 
     this.rangePanel.innerHTML = `
       <h2>范围</h2>
+      <div class="range-targets">
+        <button class="${this.rangeTarget.type === 'operator' ? 'selected' : ''}" data-range-target="operator">攻击范围</button>
+        ${skills.map((skill) => `
+          <button class="${this.rangeTarget.skillId === skill.id ? 'selected' : ''}" data-range-target-skill="${escapeHtml(skill.id)}">${escapeHtml(skill.name)}</button>
+        `).join('')}
+      </div>
       <div class="range-presets">
         ${presetButton('melee', '近战')}
         ${presetButton('diamond-2', '菱形2')}
@@ -271,6 +364,7 @@ export class CustomEditorController {
 }
 
 function operatorFields(template) {
+  const skills = operatorSkills(template);
   return [
     textInput('id', 'ID', template.id),
     textInput('name', '名称', template.name),
@@ -300,7 +394,8 @@ function operatorFields(template) {
       ['high-defense', '高防优先'],
       ['lowest-hp-percent', '低生命优先']
     ]),
-    colorInput('color', '颜色', template.color)
+    colorInput('color', '颜色', template.color),
+    skillFields(skills)
   ].join('');
 }
 
@@ -349,6 +444,47 @@ function checkboxInput(field, label, checked) {
   return `<label class="checkbox-row"><input data-field="${field}" type="checkbox" ${checked ? 'checked' : ''} />${label}</label>`;
 }
 
+function skillFields(skills) {
+  return `
+    <section class="skill-editor-list">
+      <header>
+        <h3>技能</h3>
+        <button type="button" data-add-skill ${skills.length >= 3 ? 'disabled' : ''}>新增技能</button>
+      </header>
+      ${skills.length === 0 ? '<p class="muted">暂无技能。</p>' : skills.map(skillCard).join('')}
+    </section>
+  `;
+}
+
+function skillCard(skill) {
+  return `
+    <article class="skill-editor-card">
+      <div class="skill-editor-title">
+        <strong>${escapeHtml(skill.name)}</strong>
+        <button type="button" data-remove-skill="${escapeHtml(skill.id)}">删除</button>
+      </div>
+      ${textSkillInput(skill.id, 'id', '技能ID', skill.id)}
+      ${textSkillInput(skill.id, 'name', '名称', skill.name)}
+      ${textSkillInput(skill.id, 'description', '简介', skill.description)}
+      ${selectSkillInput(skill.id, 'triggerMode', '触发', skill.triggerMode ?? 'manual', [['manual', '手动'], ['auto', '自动']])}
+      ${selectSkillInput(skill.id, 'type', '类型', skill.type, [
+        ['instant_cost', '回费'],
+        ['buff', '强化'],
+        ['next_attack', '下次攻击'],
+        ['instant_heal', '瞬时治疗']
+      ])}
+      ${numberSkillInput(skill.id, 'spCost', 'SP', skill.spCost)}
+      ${numberSkillInput(skill.id, 'duration', '持续', skill.duration ?? 0, '0.1')}
+      ${numberSkillInput(skill.id, 'amount', '数值', skill.amount ?? 0)}
+      ${numberSkillInput(skill.id, 'healPercent', '自疗比例', skill.healPercent ?? 0, '0.01')}
+      ${numberSkillInput(skill.id, 'effect.attackMultiplier', '攻击倍率', skill.effect?.attackMultiplier ?? 1, '0.05')}
+      ${numberSkillInput(skill.id, 'effect.defenseMultiplier', '防御倍率', skill.effect?.defenseMultiplier ?? 1, '0.05')}
+      ${numberSkillInput(skill.id, 'effect.attackIntervalMultiplier', '间隔倍率', skill.effect?.attackIntervalMultiplier ?? 1, '0.05')}
+      ${numberSkillInput(skill.id, 'effect.nextAttackMultiplier', '下次倍率', skill.effect?.nextAttackMultiplier ?? 1, '0.05')}
+    </article>
+  `;
+}
+
 function presetButton(id, label) {
   return `<button data-range-preset="${id}">${label}</button>`;
 }
@@ -363,6 +499,41 @@ function fieldValue(input) {
   return input.value;
 }
 
+function skillPatchFromInput(input) {
+  const field = input.dataset.skillField;
+  const value = SKILL_NUMBER_FIELDS.has(field) ? Number(input.value) : input.value;
+  if (field.startsWith('effect.')) {
+    return {
+      effect: {
+        [field.split('.')[1]]: value
+      }
+    };
+  }
+  return { [field]: value };
+}
+
+function textSkillInput(skillId, field, label, value) {
+  return `<label>${label}<input data-skill-id="${escapeHtml(skillId)}" data-skill-field="${field}" value="${escapeHtml(value)}" /></label>`;
+}
+
+function numberSkillInput(skillId, field, label, value, step = '1') {
+  return `<label>${label}<input data-skill-id="${escapeHtml(skillId)}" data-skill-field="${field}" type="number" step="${step}" value="${escapeHtml(value)}" /></label>`;
+}
+
+function selectSkillInput(skillId, field, label, value, options) {
+  return `
+    <label>${label}
+      <select data-skill-id="${escapeHtml(skillId)}" data-skill-field="${field}">
+        ${options.map(([id, text]) => `<option value="${id}" ${id === value ? 'selected' : ''}>${text}</option>`).join('')}
+      </select>
+    </label>
+  `;
+}
+
+function operatorSkills(template) {
+  return template.skills ?? [template.skill].filter(Boolean);
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -370,4 +541,3 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 }
-

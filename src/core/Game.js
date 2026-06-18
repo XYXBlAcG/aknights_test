@@ -23,11 +23,13 @@ export class Game {
     this.speed = 1;
     this.selectedOperatorType = null;
     this.selectedOperatorId = null;
+    this.speedBeforeInspection = null;
     this.hoverCell = null;
     this.resetState();
   }
 
   resetState() {
+    this.restoreSpeedAfterInspection();
     resetOperatorSequence();
     resetEnemySequence();
     this.map = normalizeMap(this.originalMap);
@@ -99,12 +101,14 @@ export class Game {
     if (!this.operatorCatalog[operatorType]) {
       return { ok: false, reason: `Unknown operator ${operatorType}` };
     }
+    this.restoreSpeedAfterInspection();
     this.selectedOperatorType = operatorType;
     this.selectedOperatorId = null;
     return { ok: true };
   }
 
   clearSelection() {
+    this.restoreSpeedAfterInspection();
     this.selectedOperatorType = null;
     this.selectedOperatorId = null;
   }
@@ -117,11 +121,11 @@ export class Game {
     return this.deploymentSystem.canDeploy(operatorType, cell);
   }
 
-  deployOperator(operatorType, cell) {
+  deployOperator(operatorType, cell, direction = 'right') {
     if (this.isEnded()) {
       return { ok: false, reason: 'Battle has ended' };
     }
-    const result = this.deploymentSystem.deploy(operatorType, cell);
+    const result = this.deploymentSystem.deploy(operatorType, cell, direction);
     if (result.ok) {
       this.selectedOperatorType = null;
       this.selectedOperatorId = result.operator.id;
@@ -147,10 +151,11 @@ export class Game {
     }
     this.selectedOperatorId = operatorId;
     this.selectedOperatorType = null;
+    this.beginInspectionSpeed();
     return { ok: true, operator };
   }
 
-  activateSkill(operatorId) {
+  activateSkill(operatorId, skillId = null) {
     if (this.isEnded()) {
       return { ok: false, reason: 'Battle has ended' };
     }
@@ -163,7 +168,7 @@ export class Game {
     return activateOperatorSkill(operator, {
       costSystem: this.costSystem,
       operators: this.deploymentSystem.operators
-    });
+    }, skillId);
   }
 
   getOperatorAt(cell) {
@@ -186,7 +191,10 @@ export class Game {
     });
 
     this.costSystem.tick(scaledDelta, this.deploymentSystem.operators);
-    tickOperatorSkills(scaledDelta, this.deploymentSystem.operators);
+    tickOperatorSkills(scaledDelta, this.deploymentSystem.operators, {
+      costSystem: this.costSystem,
+      operators: this.deploymentSystem.operators
+    });
     this.moveEnemies(scaledDelta);
     this.blockingSystem.update(this.deploymentSystem.operators, this.enemies);
 
@@ -198,6 +206,9 @@ export class Game {
 
     this.enemies = this.enemies.filter((enemy) => !enemy.isDead && !enemy.reachedExit);
     this.deploymentSystem.operators = this.deploymentSystem.operators.filter((operator) => !operator.isDead);
+    if (this.selectedOperatorId && !this.deploymentSystem.operators.some((operator) => operator.id === this.selectedOperatorId)) {
+      this.clearSelection();
+    }
     this.blockingSystem.update(this.deploymentSystem.operators, this.enemies);
     this.evaluateResult();
     return this.getState();
@@ -231,6 +242,20 @@ export class Game {
 
   isEnded() {
     return this.status === 'victory' || this.status === 'defeat';
+  }
+
+  beginInspectionSpeed() {
+    if (this.speedBeforeInspection === null) {
+      this.speedBeforeInspection = this.speed;
+    }
+    this.speed = 0.5;
+  }
+
+  restoreSpeedAfterInspection() {
+    if (this.speedBeforeInspection !== null) {
+      this.speed = this.speedBeforeInspection;
+      this.speedBeforeInspection = null;
+    }
   }
 
   moveEnemies(deltaSeconds) {

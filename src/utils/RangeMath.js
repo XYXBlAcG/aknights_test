@@ -1,6 +1,7 @@
 import { isSameCell, manhattanDistance } from './GridMath.js';
 
 const PATTERN_LIMIT = 5;
+export const DIRECTIONS = ['up', 'right', 'down', 'left'];
 
 const RANGE_PRESETS = {
   melee: [{ x: 0, y: 0 }],
@@ -54,7 +55,11 @@ export function normalizeRange(range) {
   throw new Error(`Unknown range type ${range.type}`);
 }
 
-export function rangeCellsFor(origin, range) {
+export function normalizeDirection(direction = 'right') {
+  return DIRECTIONS.includes(direction) ? direction : 'right';
+}
+
+export function rangeCellsFor(origin, range, direction = 'right') {
   const normalized = normalizeRange(range);
   if (normalized.type === 'melee') {
     return [{ x: origin.x, y: origin.y }];
@@ -73,14 +78,18 @@ export function rangeCellsFor(origin, range) {
     return cells;
   }
 
-  return normalized.cells.map((cell) => ({
-    x: origin.x + cell.x,
-    y: origin.y + cell.y
-  }));
+  const facing = normalizeDirection(direction);
+  return normalized.cells.map((cell) => {
+    const rotated = rotatePatternCell(cell, facing);
+    return {
+      x: origin.x + rotated.x,
+      y: origin.y + rotated.y
+    };
+  });
 }
 
-export function isCellInRange(origin, target, range) {
-  return rangeCellsFor(origin, range).some((cell) => isSameCell(cell, target));
+export function isCellInRange(origin, target, range, direction = 'right') {
+  return rangeCellsFor(origin, range, direction).some((cell) => isSameCell(cell, target));
 }
 
 export function rangePreset(name) {
@@ -129,3 +138,15 @@ function diamondPattern(radius) {
   return cells;
 }
 
+function rotatePatternCell(cell, direction) {
+  if (direction === 'down') {
+    return { x: -cell.y, y: cell.x };
+  }
+  if (direction === 'left') {
+    return { x: -cell.x, y: -cell.y };
+  }
+  if (direction === 'up') {
+    return { x: cell.y, y: -cell.x };
+  }
+  return { x: cell.x, y: cell.y };
+}

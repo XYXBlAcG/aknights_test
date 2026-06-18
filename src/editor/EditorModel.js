@@ -230,6 +230,52 @@ export function removeTimelineEvent(state, eventId) {
   return next;
 }
 
+export function buildTimelinePreviewModel(timelineEvents, totalWaves = 1) {
+  const events = [...(timelineEvents ?? [])].map((event) => {
+    const count = Math.max(1, Number(event.count) || 1);
+    const interval = Math.max(0, Number(event.interval) || 0);
+    const startTime = Math.max(0, Number(event.startTime) || 0);
+    const endTime = startTime + Math.max(0, count - 1) * interval;
+    return {
+      ...event,
+      wave: Math.max(1, Number(event.wave) || 1),
+      startTime,
+      count,
+      interval,
+      endTime
+    };
+  });
+  const waveCount = Math.max(1, Number(totalWaves) || 1, ...events.map((event) => event.wave));
+  const duration = Math.max(30, ...events.map((event) => event.endTime));
+  const rows = Array.from({ length: waveCount }, (_, index) => ({
+    wave: index + 1,
+    events: []
+  }));
+
+  events
+    .sort((a, b) => a.startTime - b.startTime || a.wave - b.wave)
+    .forEach((event) => {
+      const width = event.count > 1 ? ((event.endTime - event.startTime) / duration) * 100 : 2.5;
+      rows[event.wave - 1].events.push({
+        id: event.id,
+        wave: event.wave,
+        enemyType: event.enemyType,
+        pathId: event.pathId,
+        count: event.count,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        leftPercent: roundPercent((event.startTime / duration) * 100),
+        widthPercent: roundPercent(Math.max(2.5, width)),
+        label: `${event.enemyType} x${event.count}`
+      });
+    });
+
+  return {
+    duration,
+    rows
+  };
+}
+
 export function toMapJson(state) {
   const map = {
     ...state.map,
@@ -378,6 +424,10 @@ function coerceTimelinePatch(patch) {
     }
   });
   return next;
+}
+
+function roundPercent(value) {
+  return Math.round(value * 100) / 100;
 }
 
 function pathColor(index) {

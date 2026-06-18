@@ -75,11 +75,13 @@ test('game charges and releases vanguard active skill', () => {
   assert.equal(game.getState().cost, 22);
 });
 
-test('default operators each define an active skill', () => {
+test('default operators each define at least one skill', () => {
   Object.values(DEFAULT_OPERATORS).forEach((operator) => {
-    assert.equal(typeof operator.skill.name, 'string');
-    assert.equal(operator.skill.spCost > 0, true);
-    assert.equal(typeof operator.skill.description, 'string');
+    const skills = operator.skills ?? [operator.skill].filter(Boolean);
+    assert.equal(skills.length >= 1, true);
+    assert.equal(typeof skills[0].name, 'string');
+    assert.equal(skills[0].spCost > 0, true);
+    assert.equal(typeof skills[0].description, 'string');
   });
 });
 
@@ -155,4 +157,66 @@ test('game does not consume medic skill sp when there is no heal target', () => 
 
   assert.equal(result.ok, false);
   assert.equal(medic.skill.sp, medic.skill.spCost);
+});
+
+test('game can deploy operators with a chosen facing direction', () => {
+  const game = new Game({ map, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+
+  const deployed = game.deployOperator('vanguard', { x: 0, y: 0 }, 'left');
+
+  assert.equal(deployed.ok, true);
+  assert.equal(deployed.operator.direction, 'left');
+});
+
+test('auto trigger skills release when charged without manual input', () => {
+  const autoOperator = {
+    ...DEFAULT_OPERATORS.guard,
+    id: 'auto-guard',
+    cost: 0,
+    skill: null,
+    skills: [{
+      id: 'auto_supply',
+      name: '自动补给',
+      description: '自动回复费用。',
+      spCost: 1,
+      triggerMode: 'auto',
+      type: 'instant_cost',
+      amount: 5
+    }]
+  };
+  const game = new Game({
+    map: { ...map, initialCost: 0, maxCost: 20, timeline: [] },
+    operatorCatalog: { 'auto-guard': autoOperator },
+    enemyCatalog: DEFAULT_ENEMIES
+  });
+
+  const deployed = game.deployOperator('auto-guard', { x: 0, y: 0 });
+  game.start();
+  game.tick(1.1);
+
+  assert.equal(deployed.operator.skills[0].sp, 0);
+  assert.equal(game.getState().cost, 6);
+});
+
+test('inspecting a placed operator lowers speed and clearing inspection restores it', () => {
+  const game = new Game({ map, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+  const deployed = game.deployOperator('vanguard', { x: 0, y: 0 });
+  game.setSpeed(3);
+
+  game.selectPlacedOperator(deployed.operator.id);
+  assert.equal(game.getState().speed, 0.5);
+
+  game.clearSelection();
+  assert.equal(game.getState().speed, 3);
+});
+
+test('restarting while inspecting restores the previous battle speed', () => {
+  const game = new Game({ map, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+  const deployed = game.deployOperator('vanguard', { x: 0, y: 0 });
+  game.setSpeed(4);
+  game.selectPlacedOperator(deployed.operator.id);
+
+  game.restart();
+
+  assert.equal(game.getState().speed, 4);
 });

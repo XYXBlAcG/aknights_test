@@ -4,6 +4,7 @@ import {
   addPath,
   addPointToSelectedPath,
   addTimelineEvent,
+  buildTimelinePreviewModel,
   cellsInRect,
   createEditorState,
   getValidation,
@@ -136,6 +137,39 @@ test('timeline events can be added, updated, and removed', () => {
 
   state = removeTimelineEvent(state, eventId);
   assert.equal(state.timelineEvents.length, 0);
+});
+
+test('timeline preview maps spawn groups onto wave rows and percentages', () => {
+  let state = createEditorState({ width: 2, height: 1 });
+  state = addPath(state, '主线');
+  state = addTimelineEvent(state);
+  const firstId = state.timelineEvents[0].id;
+  state = updateTimelineEvent(state, firstId, {
+    wave: 1,
+    startTime: 10,
+    enemyType: 'infantry',
+    count: 3,
+    interval: 2,
+    pathId: 'path-1'
+  });
+  state = addTimelineEvent(state);
+  const secondId = state.timelineEvents[1].id;
+  state = updateTimelineEvent(state, secondId, {
+    wave: 2,
+    startTime: 20,
+    enemyType: 'heavy',
+    count: 1,
+    interval: 1,
+    pathId: 'path-1'
+  });
+
+  const preview = buildTimelinePreviewModel(state.timelineEvents, state.map.totalWaves);
+
+  assert.equal(preview.duration, 30);
+  assert.equal(preview.rows.length, 3);
+  assert.equal(preview.rows[0].events[0].leftPercent, 33.33);
+  assert.equal(preview.rows[0].events[0].widthPercent, 13.33);
+  assert.equal(preview.rows[1].events[0].label, 'heavy x1');
 });
 
 test('toMapJson exports a validateMap-compatible v2 map', () => {

@@ -32,6 +32,7 @@ export const DEFAULT_OPERATORS = {
       name: '战术补给',
       description: '立刻回复6费用。',
       spCost: 10,
+      triggerMode: 'manual',
       type: 'instant_cost',
       amount: 6
     },
@@ -59,6 +60,7 @@ export const DEFAULT_OPERATORS = {
       name: '强袭',
       description: '10秒内攻击力提升60%。',
       spCost: 16,
+      triggerMode: 'manual',
       type: 'buff',
       duration: 10,
       effect: { attackMultiplier: 1.6 }
@@ -87,6 +89,7 @@ export const DEFAULT_OPERATORS = {
       name: '坚守',
       description: '10秒内防御提升80%，并回复20%最大生命。',
       spCost: 18,
+      triggerMode: 'manual',
       type: 'buff',
       duration: 10,
       healPercent: 0.2,
@@ -116,6 +119,7 @@ export const DEFAULT_OPERATORS = {
       name: '速射',
       description: '8秒内攻击间隔缩短45%。',
       spCost: 14,
+      triggerMode: 'auto',
       type: 'buff',
       duration: 8,
       effect: { attackIntervalMultiplier: 0.55 }
@@ -144,6 +148,7 @@ export const DEFAULT_OPERATORS = {
       name: '过载术式',
       description: '下一次攻击造成2.5倍法术伤害。',
       spCost: 20,
+      triggerMode: 'auto',
       type: 'next_attack',
       effect: { nextAttackMultiplier: 2.5 }
     },
@@ -171,6 +176,7 @@ export const DEFAULT_OPERATORS = {
       name: '急救协议',
       description: '立即治疗范围内生命百分比最低的地面干员80点生命。',
       spCost: 14,
+      triggerMode: 'auto',
       type: 'instant_heal',
       amount: 80
     },

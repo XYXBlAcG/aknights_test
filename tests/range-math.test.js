@@ -36,3 +36,28 @@ test('range presets return editable pattern ranges', () => {
   assert.deepEqual(line.cells, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }]);
 });
 
+test('pattern ranges rotate from right-facing origin direction', () => {
+  const range = { type: 'pattern', cells: [{ x: 0, y: 0 }, { x: 1, y: -1 }, { x: 2, y: 0 }] };
+
+  assert.deepEqual(rangeCellsFor({ x: 4, y: 4 }, range, 'right'), [
+    { x: 4, y: 4 },
+    { x: 5, y: 3 },
+    { x: 6, y: 4 }
+  ]);
+  assert.deepEqual(rangeCellsFor({ x: 4, y: 4 }, range, 'down'), [
+    { x: 4, y: 4 },
+    { x: 5, y: 5 },
+    { x: 4, y: 6 }
+  ]);
+  assert.deepEqual(rangeCellsFor({ x: 4, y: 4 }, range, 'left'), [
+    { x: 4, y: 4 },
+    { x: 3, y: 5 },
+    { x: 2, y: 4 }
+  ]);
+  assert.deepEqual(rangeCellsFor({ x: 4, y: 4 }, range, 'up'), [
+    { x: 4, y: 4 },
+    { x: 3, y: 3 },
+    { x: 4, y: 2 }
+  ]);
+  assert.equal(isCellInRange({ x: 4, y: 4 }, { x: 4, y: 6 }, range, 'down'), true);
+});

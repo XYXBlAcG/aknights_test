@@ -57,6 +57,38 @@ test('operator and enemy templates normalize into gameplay-ready data', () => {
   assert.equal(enemy.elite, true);
 });
 
+test('operator normalization migrates legacy skill into a three-skill list', () => {
+  const operator = normalizeOperatorTemplate({
+    ...DEFAULT_OPERATORS.guard,
+    skill: {
+      ...DEFAULT_OPERATORS.guard.skill,
+      triggerMode: 'auto',
+      range: { type: 'pattern', cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }] }
+    }
+  });
+
+  assert.equal(operator.skills.length, 1);
+  assert.equal(operator.skill.id, 'power_strike');
+  assert.equal(operator.skills[0].triggerMode, 'auto');
+  assert.deepEqual(operator.skills[0].range.cells, [{ x: 0, y: 0 }, { x: 1, y: 0 }]);
+});
+
+test('operator validation rejects more than three skills', () => {
+  const result = validateOperatorTemplate({
+    ...DEFAULT_OPERATORS.sniper,
+    skill: null,
+    skills: [
+      { ...DEFAULT_OPERATORS.sniper.skill, id: 'skill_a' },
+      { ...DEFAULT_OPERATORS.sniper.skill, id: 'skill_b' },
+      { ...DEFAULT_OPERATORS.sniper.skill, id: 'skill_c' },
+      { ...DEFAULT_OPERATORS.sniper.skill, id: 'skill_d' }
+    ]
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join('\n'), /at most 3 skills/);
+});
+
 test('operator validation rejects malformed ids and empty pattern ranges', () => {
   const result = validateOperatorTemplate({
     ...DEFAULT_OPERATORS.sniper,

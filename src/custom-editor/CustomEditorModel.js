@@ -108,6 +108,79 @@ export function toggleRangeCellForSelected(state, cell) {
   });
 }
 
+export function addSkillToSelected(state) {
+  ensureOperatorSelected(state);
+  const selected = getSelectedTemplate(state);
+  const skills = operatorSkills(selected);
+  if (skills.length >= 3) {
+    throw new Error('一个干员最多 3 个技能');
+  }
+
+  const nextSkill = createDefaultSkill(skills);
+  return updateSelectedTemplate(state, withSkillList(selected, [...skills, nextSkill], `${nextSkill.name} 已添加`));
+}
+
+export function updateSkillForSelected(state, skillId, patch) {
+  ensureOperatorSelected(state);
+  const selected = getSelectedTemplate(state);
+  const skills = operatorSkills(selected);
+  const index = skills.findIndex((skill) => skill.id === skillId);
+  if (index === -1) {
+    throw new Error(`Skill ${skillId} does not exist`);
+  }
+
+  const updated = {
+    ...skills[index],
+    ...patch
+  };
+  if (patch.effect) {
+    updated.effect = {
+      ...(skills[index].effect ?? {}),
+      ...patch.effect
+    };
+  }
+  if (patch.id) {
+    updated.id = String(patch.id).trim();
+  }
+  const nextSkills = skills.map((skill, skillIndex) => skillIndex === index ? updated : skill);
+  return updateSelectedTemplate(state, withSkillList(selected, nextSkills, '技能已更新'));
+}
+
+export function removeSkillFromSelected(state, skillId) {
+  ensureOperatorSelected(state);
+  const selected = getSelectedTemplate(state);
+  const skills = operatorSkills(selected);
+  const nextSkills = skills.filter((skill) => skill.id !== skillId);
+  if (nextSkills.length === skills.length) {
+    throw new Error(`Skill ${skillId} does not exist`);
+  }
+  return updateSelectedTemplate(state, withSkillList(selected, nextSkills, '技能已删除'));
+}
+
+export function applySkillRangePresetToSelected(state, skillId, presetName) {
+  return updateSkillForSelected(state, skillId, {
+    range: rangePreset(presetName)
+  });
+}
+
+export function toggleSkillRangeCellForSelected(state, skillId, cell) {
+  ensureOperatorSelected(state);
+  const selected = getSelectedTemplate(state);
+  const skill = operatorSkills(selected).find((item) => item.id === skillId);
+  if (!skill) {
+    throw new Error(`Skill ${skillId} does not exist`);
+  }
+  const range = normalizeRange(skill.range?.type === 'pattern' ? skill.range : { type: 'pattern', cells: [{ x: 0, y: 0 }] });
+  const key = `${cell.x},${cell.y}`;
+  const existing = new Set(range.cells.map((item) => `${item.x},${item.y}`));
+  const cells = existing.has(key)
+    ? range.cells.filter((item) => `${item.x},${item.y}` !== key)
+    : [...range.cells, { x: cell.x, y: cell.y }];
+  return updateSkillForSelected(state, skillId, {
+    range: normalizeRange({ type: 'pattern', cells: cells.length > 0 ? cells : [{ x: 0, y: 0 }] })
+  });
+}
+
 export function toCustomCatalogJson(state) {
   const normalized = normalizeCustomCatalogs(state.data);
   if (normalized.errors.length > 0) {
@@ -144,6 +217,7 @@ function createDefaultOperator(existing) {
     range: rangePreset('front-line-3'),
     trait: 'custom',
     skill: null,
+    skills: [],
     color: '#5fc9ff'
   });
 }
@@ -184,6 +258,31 @@ function ensureOperatorSelected(state) {
   }
 }
 
+function operatorSkills(template) {
+  return structuredClone(template.skills ?? [template.skill].filter(Boolean));
+}
+
+function withSkillList(selected, skills) {
+  return {
+    skills,
+    skill: skills[0] ?? null
+  };
+}
+
+function createDefaultSkill(existingSkills) {
+  const id = nextSequentialId('skill', Object.fromEntries(existingSkills.map((skill) => [skill.id, skill])));
+  return {
+    id,
+    name: `技能 ${existingSkills.length + 1}`,
+    description: '自定义技能说明。',
+    spCost: 10,
+    triggerMode: 'manual',
+    type: 'buff',
+    duration: 8,
+    effect: { attackMultiplier: 1.2 }
+  };
+}
+
 function assertKind(kind) {
   if (kind !== 'operators' && kind !== 'enemies') {
     throw new Error(`Unknown template kind ${kind}`);
@@ -213,4 +312,3 @@ function nextCopyId(id, existing) {
 function cloneState(state) {
   return structuredClone(state);
 }
-

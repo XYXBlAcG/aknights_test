@@ -65,18 +65,19 @@ export function importMapJsonIntoList(maps, jsonText) {
 }
 
 export function buildSkillPanelModel(operator) {
-  if (!operator?.skill) {
-    return null;
-  }
-
-  return {
-    name: operator.skill.name,
-    description: operator.skill.description,
-    sp: Math.floor(operator.skill.sp),
-    spCost: operator.skill.spCost,
-    ready: operator.skill.sp >= operator.skill.spCost,
-    activeRemaining: Math.ceil(operator.skill.activeRemaining)
-  };
+  const skills = operator?.skills ?? [operator?.skill].filter(Boolean);
+  return skills.map((skill) => ({
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    sp: Math.floor(skill.sp),
+    spCost: skill.spCost,
+    ready: skill.sp >= skill.spCost,
+    activeRemaining: Math.ceil(skill.activeRemaining),
+    triggerMode: skill.triggerMode ?? 'manual',
+    manual: (skill.triggerMode ?? 'manual') !== 'auto',
+    rangeSummary: summarizeRange(skill.range)
+  }));
 }
 
 export function buildRenderKeys(state, message = '') {
@@ -89,7 +90,7 @@ export function buildRenderKeys(state, message = '') {
     operator.disabledReason,
     operator.selected
   ]);
-  const skill = buildSkillPanelModel(selected);
+  const skills = buildSkillPanelModel(selected);
 
   return {
     topStatus: JSON.stringify([
@@ -119,12 +120,17 @@ export function buildRenderKeys(state, message = '') {
       selected.attackInterval,
       selected.blockedCount,
       selected.block,
-      skill?.name,
-      skill?.description,
-      skill?.sp,
-      skill?.spCost,
-      skill?.ready,
-      skill?.activeRemaining
+      skills.map((skill) => [
+        skill.id,
+        skill.name,
+        skill.description,
+        skill.sp,
+        skill.spCost,
+        skill.ready,
+        skill.activeRemaining,
+        skill.triggerMode,
+        skill.rangeSummary
+      ])
     ]) : 'empty',
     controls: JSON.stringify([state.status, state.speed]),
     result: JSON.stringify([
@@ -148,6 +154,7 @@ export class UIController {
     this.mapIndex = 0;
     this.message = '';
     this.renderKeys = {};
+    this.pendingDeployment = null;
     this.createGame(this.maps[this.mapIndex]);
     this.cacheElements();
     this.bindEvents();
@@ -186,6 +193,7 @@ export class UIController {
     this.mapSelect.addEventListener('change', () => {
       this.mapIndex = Number(this.mapSelect.value);
       this.renderKeys = {};
+      this.pendingDeployment = null;
       this.createGame(this.maps[this.mapIndex]);
       this.message = '';
       this.sync();
@@ -230,6 +238,7 @@ export class UIController {
       this.game.restart();
       this.renderKeys = {};
       this.message = '';
+      this.pendingDeployment = null;
       this.sync();
     });
 
@@ -245,12 +254,13 @@ export class UIController {
       }
       event.preventDefault();
       this.game.selectOperator(button.dataset.operatorId);
+      this.pendingDeployment = null;
       this.message = `${button.dataset.operatorName} 待部署`;
       this.sync();
     });
 
     this.infoPanel.addEventListener('pointerdown', (event) => {
-      const button = event.target.closest('#skill-button');
+      const button = event.target.closest('[data-skill-button]');
       if (!button) {
         return;
       }
@@ -259,7 +269,7 @@ export class UIController {
       if (!state.selectedOperatorId) {
         return;
       }
-      const result = this.game.activateSkill(state.selectedOperatorId);
+      const result = this.game.activateSkill(state.selectedOperatorId, button.dataset.skillButton);
       this.message = result.ok ? result.message : result.reason;
       this.sync();
     });
@@ -267,6 +277,12 @@ export class UIController {
     this.canvas.addEventListener('pointermove', (event) => {
       const state = this.game.getState();
       this.game.setHoverCell(this.renderer.cellFromEvent(event, state.map));
+      if (this.pendingDeployment && isSameCell(this.pendingDeployment.cell, this.game.hoverCell)) {
+        this.pendingDeployment = {
+          ...this.pendingDeployment,
+          direction: this.renderer.directionFromEvent(event, state.map, this.pendingDeployment.cell)
+        };
+      }
       this.sync();
     });
 
@@ -278,15 +294,18 @@ export class UIController {
     this.canvas.addEventListener('click', (event) => {
       const state = this.game.getState();
       const cell = this.renderer.cellFromEvent(event, state.map);
-      if (state.selectedOperatorType) {
-        const result = this.game.deployOperator(state.selectedOperatorType, cell);
-        this.message = result.ok ? `${result.operator.name} 部署完成` : result.reason;
+      if (this.pendingDeployment) {
+        this.handlePendingDeploymentClick(event, cell);
+      } else if (state.selectedOperatorType) {
+        this.beginDeploymentDirectionSelection(state.selectedOperatorType, cell);
       } else {
         const operator = this.game.getOperatorAt(cell);
         if (operator) {
+          this.pendingDeployment = null;
           this.game.selectPlacedOperator(operator.id);
           this.message = `${operator.name} 已选中`;
         } else {
+          this.pendingDeployment = null;
           this.game.clearSelection();
           this.message = '';
         }
@@ -300,8 +319,31 @@ export class UIController {
       const cell = this.renderer.cellFromEvent(event, state.map);
       const operator = this.game.getOperatorAt(cell);
       if (operator) {
+        this.pendingDeployment = null;
         const result = this.game.retreatOperator(operator.id);
         this.message = result.ok ? `${operator.name} 已撤退` : result.reason;
+        this.sync();
+      }
+    });
+
+    window.addEventListener('keydown', (event) => {
+      if (!this.pendingDeployment) {
+        return;
+      }
+      const direction = directionFromKey(event.key);
+      if (direction) {
+        event.preventDefault();
+        this.finalizePendingDeployment(direction);
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        this.finalizePendingDeployment(this.pendingDeployment.direction ?? 'right');
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.pendingDeployment = null;
+        this.message = '已取消部署方向选择';
         this.sync();
       }
     });
@@ -313,6 +355,7 @@ export class UIController {
     this.mapIndex = imported.mapIndex;
     this.renderKeys = {};
     this.message = `已导入地图：${imported.map.name}`;
+    this.pendingDeployment = null;
     this.createGame(imported.map);
     this.sync();
     return imported.map;
@@ -327,7 +370,54 @@ export class UIController {
     this.renderIfChanged('infoPanel', keys.infoPanel, () => this.renderInfoPanel(state));
     this.renderIfChanged('controls', keys.controls, () => this.renderControls(state));
     this.renderIfChanged('result', keys.result, () => this.renderResult(state));
-    this.renderer.render(state);
+    this.renderer.render({ ...state, pendingDeployment: this.pendingDeployment });
+  }
+
+  beginDeploymentDirectionSelection(operatorType, cell) {
+    const check = this.game.canDeploy(operatorType, cell);
+    if (!check.ok) {
+      this.message = check.reason;
+      this.pendingDeployment = null;
+      return;
+    }
+    this.pendingDeployment = {
+      operatorType,
+      cell: { x: cell.x, y: cell.y },
+      direction: 'right'
+    };
+    this.message = `${check.template.name} 选择方向`;
+  }
+
+  handlePendingDeploymentClick(event, cell) {
+    if (isSameCell(cell, this.pendingDeployment.cell)) {
+      this.finalizePendingDeployment(this.renderer.directionFromEvent(event, this.game.getState().map, this.pendingDeployment.cell));
+      return;
+    }
+
+    const adjacentDirection = directionBetweenCells(this.pendingDeployment.cell, cell);
+    if (adjacentDirection) {
+      this.finalizePendingDeployment(adjacentDirection);
+      return;
+    }
+
+    const state = this.game.getState();
+    if (state.selectedOperatorType) {
+      this.beginDeploymentDirectionSelection(state.selectedOperatorType, cell);
+      return;
+    }
+
+    this.pendingDeployment = null;
+  }
+
+  finalizePendingDeployment(direction) {
+    if (!this.pendingDeployment) {
+      return;
+    }
+    const pending = this.pendingDeployment;
+    const result = this.game.deployOperator(pending.operatorType, pending.cell, direction);
+    this.pendingDeployment = null;
+    this.message = result.ok ? `${result.operator.name} 部署完成 · ${directionLabel(direction)}` : result.reason;
+    this.sync();
   }
 
   renderIfChanged(section, key, render) {
@@ -384,7 +474,7 @@ export class UIController {
       return;
     }
 
-    const skill = buildSkillPanelModel(selected);
+    const skills = buildSkillPanelModel(selected);
     this.infoPanel.innerHTML = `
       <h2>${selected.name}</h2>
       <dl>
@@ -395,17 +485,20 @@ export class UIController {
         <div><dt>间隔</dt><dd>${selected.attackInterval}s</dd></div>
         <div><dt>阻挡</dt><dd>${selected.blockedCount}/${selected.block}</dd></div>
       </dl>
-      ${skill ? `
+      ${skills.length > 0 ? skills.map((skill) => `
         <section class="skill-panel">
-          <h3>${skill.name}</h3>
+          <h3>${skill.name}<span>${skill.triggerMode === 'auto' ? '自动' : '手动'}</span></h3>
           <p>${skill.description}</p>
+          <small>范围：${skill.rangeSummary}</small>
           <div class="skill-sp"><span style="width:${Math.min(100, (skill.sp / skill.spCost) * 100)}%"></span></div>
           <div class="skill-row">
             <strong>${skill.sp}/${skill.spCost} SP</strong>
-            <button id="skill-button" ${skill.ready ? '' : 'disabled'}>${skill.activeRemaining > 0 ? `${skill.activeRemaining}s` : '释放技能'}</button>
+            ${skill.manual
+              ? `<button data-skill-button="${skill.id}" ${skill.ready ? '' : 'disabled'}>${skill.activeRemaining > 0 ? `${skill.activeRemaining}s` : '释放技能'}</button>`
+              : `<button disabled>${skill.activeRemaining > 0 ? `${skill.activeRemaining}s` : '自动'}</button>`}
           </div>
         </section>
-      ` : ''}
+      `).join('') : ''}
     `;
   }
 
@@ -435,4 +528,72 @@ export class UIController {
       this.sync();
     }, { once: true });
   }
+}
+
+function summarizeRange(range) {
+  if (!range) {
+    return '默认范围';
+  }
+  if (range.type === 'melee') {
+    return '自身格';
+  }
+  if (range.type === 'diamond') {
+    return `菱形${range.radius}`;
+  }
+  if (range.type === 'pattern') {
+    return `${range.cells?.length ?? 0}格`;
+  }
+  return '自定义';
+}
+
+function isSameCell(a, b) {
+  return a && b && a.x === b.x && a.y === b.y;
+}
+
+function directionBetweenCells(origin, target) {
+  const dx = target.x - origin.x;
+  const dy = target.y - origin.y;
+  if (Math.abs(dx) + Math.abs(dy) !== 1) {
+    return null;
+  }
+  if (dx === 1) {
+    return 'right';
+  }
+  if (dx === -1) {
+    return 'left';
+  }
+  if (dy === 1) {
+    return 'down';
+  }
+  return 'up';
+}
+
+function directionFromKey(key) {
+  const normalized = key.toLowerCase();
+  if (normalized === 'arrowup' || normalized === 'w') {
+    return 'up';
+  }
+  if (normalized === 'arrowright' || normalized === 'd') {
+    return 'right';
+  }
+  if (normalized === 'arrowdown' || normalized === 's') {
+    return 'down';
+  }
+  if (normalized === 'arrowleft' || normalized === 'a') {
+    return 'left';
+  }
+  return null;
+}
+
+function directionLabel(direction) {
+  if (direction === 'up') {
+    return '向上';
+  }
+  if (direction === 'down') {
+    return '向下';
+  }
+  if (direction === 'left') {
+    return '向左';
+  }
+  return '向右';
 }

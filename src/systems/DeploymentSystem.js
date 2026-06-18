@@ -58,14 +58,14 @@ export class DeploymentSystem {
     return { ok: true, template };
   }
 
-  deploy(operatorType, cell) {
+  deploy(operatorType, cell, direction = 'right') {
     const check = this.canDeploy(operatorType, cell);
     if (!check.ok) {
       return check;
     }
 
     this.costSystem.spend(check.template.cost);
-    const operator = new Operator(check.template, cell);
+    const operator = new Operator(check.template, cell, direction);
     this.operators.push(operator);
     return { ok: true, operator };
   }

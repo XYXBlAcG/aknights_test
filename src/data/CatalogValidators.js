@@ -6,6 +6,8 @@ const DEPLOY_TYPES = new Set(['ground', 'high']);
 const DAMAGE_TYPES = new Set(['physical', 'arts', 'heal']);
 const TARGETING_TYPES = new Set(['blocked-first', 'exit-first', 'flying-first', 'high-defense', 'lowest-hp-percent']);
 const SKILL_TYPES = new Set(['instant_cost', 'buff', 'next_attack', 'instant_heal']);
+const SKILL_TRIGGER_MODES = new Set(['manual', 'auto']);
+const MAX_SKILLS_PER_OPERATOR = 3;
 
 export function normalizeOperatorTemplate(template) {
   const id = normalizeId(template?.id, 'operator id');
@@ -13,6 +15,8 @@ export function normalizeOperatorTemplate(template) {
   const deployType = oneOf(template?.deployType, DEPLOY_TYPES, 'deploy type');
   const damageType = oneOf(template?.damageType, DAMAGE_TYPES, 'damage type');
   const targeting = oneOf(template?.targeting ?? defaultTargetingForDamage(damageType), TARGETING_TYPES, 'targeting');
+
+  const skills = normalizeSkills(template);
 
   return {
     id,
@@ -31,7 +35,8 @@ export function normalizeOperatorTemplate(template) {
     range: normalizeRange(template?.range),
     targeting,
     trait: String(template?.trait ?? 'custom'),
-    skill: normalizeSkill(template?.skill),
+    skill: skills[0] ?? null,
+    skills,
     color: nonEmptyString(template?.color ?? '#5fc9ff', 'color')
   };
 }
@@ -151,6 +156,20 @@ function oneOf(value, allowed, label) {
   return value;
 }
 
+function normalizeSkills(template) {
+  const sourceSkills = Array.isArray(template?.skills)
+    ? template.skills
+    : (template?.skill ? [template.skill] : []);
+
+  if (sourceSkills.length > MAX_SKILLS_PER_OPERATOR) {
+    throw new Error(`operator may define at most 3 skills`);
+  }
+
+  return sourceSkills
+    .filter(Boolean)
+    .map((skill) => normalizeSkill(skill));
+}
+
 function normalizeSkill(skill) {
   if (!skill) {
     return null;
@@ -162,8 +181,12 @@ function normalizeSkill(skill) {
     name: nonEmptyString(skill.name ?? type, 'skill name'),
     description: nonEmptyString(skill.description ?? '', 'skill description'),
     spCost: numberInRange(skill.spCost ?? 1, 1, 999, 'skill sp cost'),
+    triggerMode: oneOf(skill.triggerMode ?? 'manual', SKILL_TRIGGER_MODES, 'skill trigger mode'),
     type
   };
+  if (skill.range) {
+    normalized.range = normalizeRange(skill.range);
+  }
   if ('duration' in normalized) {
     normalized.duration = numberInRange(normalized.duration, 0, 999, 'skill duration');
   }

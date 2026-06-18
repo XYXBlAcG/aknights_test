@@ -11,6 +11,7 @@ import {
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
 import { DEFAULT_ENEMIES } from '../src/data/defaultEnemies.js';
 import { buildEnemyOptionsModel } from '../src/editor/EditorController.js';
+import { fieldEditRenderMode } from '../src/custom-editor/CustomEditorController.js';
 
 test('calculateCanvasMetrics fits map into available canvas area', () => {
   const metrics = calculateCanvasMetrics({ width: 10, height: 5 }, 1000, 600);
@@ -125,25 +126,57 @@ test('rangeCellsFor returns translated pattern cells for custom ranges', () => {
   }), [{ x: 2, y: 3 }, { x: 1, y: 5 }]);
 });
 
-test('buildSkillPanelModel exposes ready state for selected operator skill', () => {
+test('buildSkillPanelModel exposes all selected operator skills', () => {
   const operator = {
-    skill: {
+    skills: [{
+      id: 'manual_supply',
       name: '战术补给',
       description: '立刻回复6费用',
       sp: 10,
       spCost: 10,
-      activeRemaining: 0
-    }
+      activeRemaining: 0,
+      triggerMode: 'manual',
+      range: { type: 'pattern', cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }] }
+    }, {
+      id: 'auto_fire',
+      name: '自动速射',
+      description: '自动缩短攻击间隔',
+      sp: 4,
+      spCost: 8,
+      activeRemaining: 3,
+      triggerMode: 'auto'
+    }]
   };
 
-  assert.deepEqual(buildSkillPanelModel(operator), {
+  assert.deepEqual(buildSkillPanelModel(operator), [{
+    id: 'manual_supply',
     name: '战术补给',
     description: '立刻回复6费用',
     sp: 10,
     spCost: 10,
     ready: true,
-    activeRemaining: 0
-  });
+    activeRemaining: 0,
+    triggerMode: 'manual',
+    manual: true,
+    rangeSummary: '2格'
+  }, {
+    id: 'auto_fire',
+    name: '自动速射',
+    description: '自动缩短攻击间隔',
+    sp: 4,
+    spCost: 8,
+    ready: false,
+    activeRemaining: 3,
+    triggerMode: 'auto',
+    manual: false,
+    rangeSummary: '默认范围'
+  }]);
+});
+
+test('custom editor input events avoid full form rerender to preserve focus', () => {
+  assert.equal(fieldEditRenderMode({ eventType: 'input', tagName: 'INPUT' }), 'partial');
+  assert.equal(fieldEditRenderMode({ eventType: 'change', tagName: 'INPUT' }), 'full');
+  assert.equal(fieldEditRenderMode({ eventType: 'change', tagName: 'SELECT' }), 'full');
 });
 
 test('buildRenderKeys keeps interactive regions stable across frame-only changes', () => {

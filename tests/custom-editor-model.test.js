@@ -1,15 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  addSkillToSelected,
   applyRangePresetToSelected,
+  applySkillRangePresetToSelected,
   createCustomEditorState,
   createTemplate,
   deleteSelectedTemplate,
   duplicateTemplate,
   loadCustomCatalogJson,
+  removeSkillFromSelected,
   selectTemplate,
   toCustomCatalogJson,
   toggleRangeCellForSelected,
+  toggleSkillRangeCellForSelected,
+  updateSkillForSelected,
   updateSelectedTemplate
 } from '../src/custom-editor/CustomEditorModel.js';
 
@@ -74,3 +79,40 @@ test('custom editor model exports and imports valid catalog JSON', () => {
   assert.equal(selected.selectedId, 'pattern-caster');
 });
 
+test('custom editor model edits up to three operator skills with custom ranges', () => {
+  let state = createCustomEditorState();
+  state = createTemplate(state, 'operators');
+  const operatorId = state.selectedId;
+
+  state = addSkillToSelected(state);
+  const firstSkillId = state.data.operators[operatorId].skills[0].id;
+  state = updateSkillForSelected(state, firstSkillId, {
+    id: 'auto_strike',
+    name: '自动强袭',
+    description: '自动触发的攻击强化。',
+    triggerMode: 'auto',
+    type: 'buff',
+    spCost: 8,
+    duration: 6,
+    effect: { attackMultiplier: 1.5 }
+  });
+  state = applySkillRangePresetToSelected(state, 'auto_strike', 'front-line-3');
+  state = toggleSkillRangeCellForSelected(state, 'auto_strike', { x: 4, y: 0 });
+
+  state = addSkillToSelected(state);
+  state = addSkillToSelected(state);
+
+  assert.equal(state.data.operators[operatorId].skills.length, 3);
+  assert.equal(state.data.operators[operatorId].skills[0].triggerMode, 'auto');
+  assert.deepEqual(state.data.operators[operatorId].skills[0].range.cells, [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 2, y: 0 },
+    { x: 3, y: 0 },
+    { x: 4, y: 0 }
+  ]);
+  assert.throws(() => addSkillToSelected(state), /最多 3 个技能/);
+
+  state = removeSkillFromSelected(state, 'auto_strike');
+  assert.equal(state.data.operators[operatorId].skills.length, 2);
+});

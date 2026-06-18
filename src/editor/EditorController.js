@@ -1,6 +1,7 @@
 import {
   addPath,
   addTimelineEvent,
+  buildTimelinePreviewModel,
   cellsInRect,
   createEditorState,
   getValidation,
@@ -54,6 +55,7 @@ export class EditorController {
     this.maxLivesInput = this.root.querySelector('#max-lives-input');
     this.totalWavesInput = this.root.querySelector('#total-waves-input');
     this.pathList = this.root.querySelector('#path-list');
+    this.timelinePreview = this.root.querySelector('#timeline-preview');
     this.timelineList = this.root.querySelector('#timeline-list');
     this.jsonTextarea = this.root.querySelector('#json-textarea');
     this.validationPanel = this.root.querySelector('#validation-panel');
@@ -268,6 +270,7 @@ export class EditorController {
     this.syncMetaInputs();
     this.renderTerrainTools();
     this.renderPathList();
+    this.renderTimelinePreview();
     this.renderTimelineList();
     this.renderValidation(message);
     this.renderer.render(this.state, this.hoverCell, this.previewCells);
@@ -348,6 +351,40 @@ export class EditorController {
     });
   }
 
+  renderTimelinePreview() {
+    if (!this.timelinePreview) {
+      return;
+    }
+    const preview = buildTimelinePreviewModel(this.state.timelineEvents, this.state.map.totalWaves);
+    if (this.state.timelineEvents.length === 0) {
+      this.timelinePreview.innerHTML = '<p class="muted">暂无时间轴预览。</p>';
+      return;
+    }
+
+    this.timelinePreview.innerHTML = `
+      <div class="timeline-scale">
+        <span>0s</span>
+        <span>${preview.duration}s</span>
+      </div>
+      <div class="timeline-preview-rows">
+        ${preview.rows.map((row) => `
+          <div class="timeline-preview-row">
+            <strong>W${row.wave}</strong>
+            <div class="timeline-preview-track">
+              ${row.events.map((event) => `
+                <span class="timeline-preview-event"
+                  style="left:${event.leftPercent}%;width:${event.widthPercent}%;background:${pathColorForEvent(this.state, event)}"
+                  title="${escapeHtml(event.label)} · ${event.startTime}s">
+                  ${escapeHtml(shortEventLabel(event))}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
   renderValidation(message) {
     const validation = getValidation(this.state);
     this.validationPanel.classList.toggle('valid', validation.ok);
@@ -380,6 +417,14 @@ export function buildEnemyOptionsModel({ enemyCatalog, selectedEnemyType = null 
 
 function enemyOption(value, selected, label, missing = false) {
   return `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(label)}${missing ? '' : ''}</option>`;
+}
+
+function pathColorForEvent(state, event) {
+  return state.map.paths.find((path) => path.id === event.pathId)?.color ?? '#f6c445';
+}
+
+function shortEventLabel(event) {
+  return `${event.enemyType.slice(0, 2)} x${event.count}`;
 }
 
 function escapeHtml(value) {
