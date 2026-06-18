@@ -5,7 +5,7 @@
   "description": "基础阻挡与远程覆盖教学。",
   "width": 10,
   "height": 6,
-  "initialCost": 12,
+  "initialCost": 20,
   "maxCost": 30,
   "maxLives": 10,
   "totalWaves": 3,

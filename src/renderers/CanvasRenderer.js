@@ -33,6 +33,27 @@ export function tileColorForType(type) {
   return TILE_COLORS[type] ?? '#1a222b';
 }
 
+export function rangeCellsFor(origin, range) {
+  if (!origin || !range) {
+    return [];
+  }
+
+  if (range.type === 'melee') {
+    return [{ x: origin.x, y: origin.y }];
+  }
+
+  const radius = Math.ceil(range.radius);
+  const cells = [];
+  for (let y = origin.y - radius; y <= origin.y + radius; y += 1) {
+    for (let x = origin.x - radius; x <= origin.x + radius; x += 1) {
+      if (isCellInDiamondRange(origin, { x, y }, range.radius)) {
+        cells.push({ x, y });
+      }
+    }
+  }
+  return cells;
+}
+
 export class CanvasRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -52,9 +73,9 @@ export class CanvasRenderer {
     this.drawGrid(ctx, state);
     this.drawPaths(ctx, state);
     this.drawDeploymentPreview(ctx, state);
+    this.drawSelectedRange(ctx, state);
     this.drawOperators(ctx, state);
     this.drawEnemies(ctx, state);
-    this.drawSelectedRange(ctx, state);
     ctx.restore();
   }
 
@@ -178,11 +199,6 @@ export class CanvasRenderer {
       ctx.fillText(operator.className.slice(0, 1), x, y);
 
       this.drawHpBar(ctx, operator, x - radius, y + radius + 4, radius * 2, 5);
-      if (operator.block > 0) {
-        ctx.fillStyle = '#dce9f8';
-        ctx.font = `600 ${Math.max(9, tileSize * 0.14)}px Inter, sans-serif`;
-        ctx.fillText(`${operator.blockedCount}/${operator.block}`, x, y - radius - 7);
-      }
     });
   }
 
@@ -220,21 +236,15 @@ export class CanvasRenderer {
   }
 
   drawRangeCells(ctx, origin, range, fillStyle) {
-    if (!origin || !range || range.type === 'melee') {
+    if (!origin || !range) {
       return;
     }
 
     const { tileSize, offsetX, offsetY } = this.metrics;
-    const radius = Math.ceil(range.radius);
-    for (let y = origin.y - radius; y <= origin.y + radius; y += 1) {
-      for (let x = origin.x - radius; x <= origin.x + radius; x += 1) {
-        if (!isCellInDiamondRange(origin, { x, y }, range.radius)) {
-          continue;
-        }
-        ctx.fillStyle = fillStyle;
-        ctx.fillRect(offsetX + x * tileSize + 3, offsetY + y * tileSize + 3, tileSize - 6, tileSize - 6);
-      }
-    }
+    rangeCellsFor(origin, range).forEach((cell) => {
+      ctx.fillStyle = fillStyle;
+      ctx.fillRect(offsetX + cell.x * tileSize + 3, offsetY + cell.y * tileSize + 3, tileSize - 6, tileSize - 6);
+    });
   }
 
   drawHpBar(ctx, unit, x, y, width, height) {

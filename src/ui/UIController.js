@@ -42,6 +42,21 @@ export function buildOperatorDeckModel({ operatorCatalog, operators, cost, selec
   });
 }
 
+export function buildSkillPanelModel(operator) {
+  if (!operator?.skill) {
+    return null;
+  }
+
+  return {
+    name: operator.skill.name,
+    description: operator.skill.description,
+    sp: Math.floor(operator.skill.sp),
+    spCost: operator.skill.spCost,
+    ready: operator.skill.sp >= operator.skill.spCost,
+    activeRemaining: Math.ceil(operator.skill.activeRemaining)
+  };
+}
+
 export class UIController {
   constructor({ root, canvas, renderer, maps, operatorCatalog, enemyCatalog }) {
     this.root = root;
@@ -125,6 +140,20 @@ export class UIController {
       }
       this.game.selectOperator(button.dataset.operatorId);
       this.message = `${button.dataset.operatorName} 待部署`;
+      this.sync();
+    });
+
+    this.infoPanel.addEventListener('click', (event) => {
+      const button = event.target.closest('#skill-button');
+      if (!button) {
+        return;
+      }
+      const state = this.game.getState();
+      if (!state.selectedOperatorId) {
+        return;
+      }
+      const result = this.game.activateSkill(state.selectedOperatorId);
+      this.message = result.ok ? result.message : result.reason;
       this.sync();
     });
 
@@ -228,6 +257,7 @@ export class UIController {
       return;
     }
 
+    const skill = buildSkillPanelModel(selected);
     this.infoPanel.innerHTML = `
       <h2>${selected.name}</h2>
       <dl>
@@ -238,6 +268,17 @@ export class UIController {
         <div><dt>间隔</dt><dd>${selected.attackInterval}s</dd></div>
         <div><dt>阻挡</dt><dd>${selected.blockedCount}/${selected.block}</dd></div>
       </dl>
+      ${skill ? `
+        <section class="skill-panel">
+          <h3>${skill.name}</h3>
+          <p>${skill.description}</p>
+          <div class="skill-sp"><span style="width:${Math.min(100, (skill.sp / skill.spCost) * 100)}%"></span></div>
+          <div class="skill-row">
+            <strong>${skill.sp}/${skill.spCost} SP</strong>
+            <button id="skill-button" ${skill.ready ? '' : 'disabled'}>${skill.activeRemaining > 0 ? `${skill.activeRemaining}s` : '释放技能'}</button>
+          </div>
+        </section>
+      ` : ''}
     `;
   }
 

@@ -5,7 +5,7 @@
   "description": "长路径与混合威胁，要求提前建立稳定火力区。",
   "width": 12,
   "height": 8,
-  "initialCost": 15,
+  "initialCost": 24,
   "maxCost": 35,
   "maxLives": 5,
   "totalWaves": 5,

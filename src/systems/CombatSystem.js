@@ -1,4 +1,10 @@
 import { isCellInDiamondRange } from '../utils/GridMath.js';
+import {
+  consumeNextAttackSkill,
+  getEffectiveAttack,
+  getEffectiveAttackInterval,
+  getEffectiveDefense
+} from './SkillSystem.js';
 
 export function createCombatSystem(options = {}) {
   return new CombatSystem(options);
@@ -17,7 +23,7 @@ export class CombatSystem {
 
     operators.filter((operator) => !operator.isDead).forEach((operator) => {
       operator.attackTimer += deltaSeconds;
-      if (operator.attackTimer < operator.attackInterval) {
+      if (operator.attackTimer < getEffectiveAttackInterval(operator)) {
         return;
       }
 
@@ -26,7 +32,7 @@ export class CombatSystem {
         if (!target) {
           return;
         }
-        target.hp = Math.min(target.maxHp, target.hp + operator.attack);
+        target.hp = Math.min(target.maxHp, target.hp + getEffectiveAttack(operator));
         operator.attackTimer = 0;
         healedOperators.push(target);
         return;
@@ -38,6 +44,7 @@ export class CombatSystem {
       }
 
       target.hp -= calculateDamage(operator, target);
+      consumeNextAttackSkill(operator);
       operator.attackTimer = 0;
       if (target.hp <= 0 && !killedEnemies.includes(target)) {
         target.hp = 0;
@@ -59,7 +66,7 @@ export class CombatSystem {
         return;
       }
 
-      target.hp -= calculatePhysicalDamage(enemy.attack, target.defense);
+      target.hp -= calculatePhysicalDamage(enemy.attack, getEffectiveDefense(target));
       enemy.attackTimer = 0;
       if (target.hp <= 0 && !killedOperators.includes(target)) {
         target.hp = 0;
@@ -84,9 +91,9 @@ export class CombatSystem {
 
 export function calculateDamage(attacker, target) {
   if (attacker.damageType === 'arts') {
-    return Math.max(1, Math.round(attacker.attack * (1 - (target.resistance ?? 0))));
+    return Math.max(1, Math.round(getEffectiveAttack(attacker) * (1 - (target.resistance ?? 0))));
   }
-  return calculatePhysicalDamage(attacker.attack, target.defense ?? 0);
+  return calculatePhysicalDamage(getEffectiveAttack(attacker), target.defense ?? 0);
 }
 
 export function calculatePhysicalDamage(attack, defense) {

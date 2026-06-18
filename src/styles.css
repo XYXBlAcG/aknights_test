@@ -169,6 +169,55 @@ button:disabled {
   font-weight: 700;
 }
 
+.skill-panel {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #344454;
+}
+
+.skill-panel h3 {
+  margin: 0 0 6px;
+  color: #f6c445;
+  font-size: 15px;
+}
+
+.skill-panel p {
+  margin: 0 0 10px;
+}
+
+.skill-sp {
+  height: 8px;
+  margin-bottom: 10px;
+  background: #0b0f15;
+  border: 1px solid #344454;
+}
+
+.skill-sp span {
+  display: block;
+  height: 100%;
+  background: #f6c445;
+}
+
+.skill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skill-row strong {
+  color: #dce9f8;
+  font-size: 12px;
+}
+
+.skill-row button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-color: #f6c445;
+  color: #f6c445;
+  font-weight: 800;
+}
+
 .bottom-shell {
   display: grid;
   grid-template-columns: 1fr 260px;

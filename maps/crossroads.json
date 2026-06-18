@@ -5,7 +5,7 @@
   "description": "双线错峰推进，考验中心防线与高台覆盖。",
   "width": 9,
   "height": 7,
-  "initialCost": 10,
+  "initialCost": 22,
   "maxCost": 30,
   "maxLives": 8,
   "totalWaves": 4,

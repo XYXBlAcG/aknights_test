@@ -27,6 +27,14 @@ export const DEFAULT_OPERATORS = {
     range: { type: 'melee', radius: 0 },
     targeting: 'blocked-first',
     trait: 'deployed_cost_regen',
+    skill: {
+      id: 'tactical_supply',
+      name: '战术补给',
+      description: '立刻回复6费用。',
+      spCost: 10,
+      type: 'instant_cost',
+      amount: 6
+    },
     color: '#f6c445'
   },
   guard: {
@@ -46,6 +54,15 @@ export const DEFAULT_OPERATORS = {
     range: { type: 'melee', radius: 0 },
     targeting: 'blocked-first',
     trait: 'balanced_melee',
+    skill: {
+      id: 'power_strike',
+      name: '强袭',
+      description: '10秒内攻击力提升60%。',
+      spCost: 16,
+      type: 'buff',
+      duration: 10,
+      effect: { attackMultiplier: 1.6 }
+    },
     color: '#ff8a4d'
   },
   defender: {
@@ -65,6 +82,16 @@ export const DEFAULT_OPERATORS = {
     range: { type: 'melee', radius: 0 },
     targeting: 'blocked-first',
     trait: 'high_block',
+    skill: {
+      id: 'hold_line',
+      name: '坚守',
+      description: '10秒内防御提升80%，并回复20%最大生命。',
+      spCost: 18,
+      type: 'buff',
+      duration: 10,
+      healPercent: 0.2,
+      effect: { defenseMultiplier: 1.8 }
+    },
     color: '#85a6ff'
   },
   sniper: {
@@ -84,6 +111,15 @@ export const DEFAULT_OPERATORS = {
     range: { type: 'diamond', radius: 3 },
     targeting: 'flying-first',
     trait: 'anti_air',
+    skill: {
+      id: 'rapid_fire',
+      name: '速射',
+      description: '8秒内攻击间隔缩短45%。',
+      spCost: 14,
+      type: 'buff',
+      duration: 8,
+      effect: { attackIntervalMultiplier: 0.55 }
+    },
     color: '#5fc9ff'
   },
   caster: {
@@ -103,6 +139,14 @@ export const DEFAULT_OPERATORS = {
     range: { type: 'diamond', radius: 2.5 },
     targeting: 'high-defense',
     trait: 'arts_damage',
+    skill: {
+      id: 'arts_overload',
+      name: '过载术式',
+      description: '下一次攻击造成2.5倍法术伤害。',
+      spCost: 20,
+      type: 'next_attack',
+      effect: { nextAttackMultiplier: 2.5 }
+    },
     color: '#b98cff'
   },
   medic: {
@@ -122,6 +166,14 @@ export const DEFAULT_OPERATORS = {
     range: { type: 'diamond', radius: 2.5 },
     targeting: 'lowest-hp-percent',
     trait: 'healer',
+    skill: {
+      id: 'emergency_protocol',
+      name: '急救协议',
+      description: '立即治疗范围内生命百分比最低的地面干员80点生命。',
+      spCost: 14,
+      type: 'instant_heal',
+      amount: 80
+    },
     color: '#72e0a6'
   }
 };

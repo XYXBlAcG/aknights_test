@@ -23,6 +23,13 @@ export class Operator {
     this.range = template.range;
     this.targeting = template.targeting;
     this.trait = template.trait;
+    this.skill = template.skill ? {
+      ...template.skill,
+      effect: template.skill.effect ? { ...template.skill.effect } : {},
+      sp: 0,
+      activeRemaining: 0,
+      nextAttackMultiplier: null
+    } : null;
     this.color = template.color;
     this.cell = { x: cell.x, y: cell.y };
     this.traitTimer = 0;

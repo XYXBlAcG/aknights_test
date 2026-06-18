@@ -9,6 +9,7 @@ import { createCostSystem } from '../systems/CostSystem.js';
 import { createDeploymentSystem } from '../systems/DeploymentSystem.js';
 import { createWaveSystem } from '../systems/WaveSystem.js';
 import { evaluateBattleResult } from '../systems/WinLoseSystem.js';
+import { activateOperatorSkill, tickOperatorSkills } from '../systems/SkillSystem.js';
 import { pathLength, pathPositionAtDistance } from '../utils/GridMath.js';
 
 const SPEEDS = [0.5, 1, 1.5, 2, 3, 4, 5];
@@ -149,6 +150,22 @@ export class Game {
     return { ok: true, operator };
   }
 
+  activateSkill(operatorId) {
+    if (this.isEnded()) {
+      return { ok: false, reason: 'Battle has ended' };
+    }
+
+    const operator = this.deploymentSystem.operators.find((item) => item.id === operatorId);
+    if (!operator) {
+      return { ok: false, reason: `Operator ${operatorId} is not deployed` };
+    }
+
+    return activateOperatorSkill(operator, {
+      costSystem: this.costSystem,
+      operators: this.deploymentSystem.operators
+    });
+  }
+
   getOperatorAt(cell) {
     return this.deploymentSystem.getOperatorAt(cell);
   }
@@ -169,6 +186,7 @@ export class Game {
     });
 
     this.costSystem.tick(scaledDelta, this.deploymentSystem.operators);
+    tickOperatorSkills(scaledDelta, this.deploymentSystem.operators);
     this.moveEnemies(scaledDelta);
     this.blockingSystem.update(this.deploymentSystem.operators, this.enemies);
 

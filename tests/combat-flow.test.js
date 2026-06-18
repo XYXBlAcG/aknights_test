@@ -57,6 +57,67 @@ test('combat system lets ranged operators damage enemies in range', () => {
   assert.equal(enemy.hp, 92);
 });
 
+test('combat system applies active attack multiplier skill effects', () => {
+  const map = { width: 1, height: 1, grid: [['path']], initialCost: 30, maxCost: 30 };
+  const deployment = createDeploymentSystem({
+    map,
+    costSystem: createCostSystem({ initialCost: 30, maxCost: 30 }),
+    operatorCatalog: DEFAULT_OPERATORS
+  });
+  const guard = deployment.deploy('guard', { x: 0, y: 0 }).operator;
+  const enemy = new Enemy(DEFAULT_ENEMIES.infantry, { pathId: 'main' });
+  enemy.cell = { x: 0, y: 0 };
+  enemy.blockedBy = guard.id;
+  guard.blockedEnemies = [enemy];
+  guard.skill = {
+    activeRemaining: 10,
+    effect: { attackMultiplier: 1.6 }
+  };
+  const combat = createCombatSystem();
+
+  combat.tick(1.2, { operators: [guard], enemies: [enemy] });
+
+  assert.equal(enemy.hp, 46);
+});
+
+test('combat system applies active attack interval multiplier effects', () => {
+  const map = { width: 2, height: 1, grid: [['path', 'high']], initialCost: 30, maxCost: 30 };
+  const deployment = createDeploymentSystem({
+    map,
+    costSystem: createCostSystem({ initialCost: 30, maxCost: 30 }),
+    operatorCatalog: DEFAULT_OPERATORS
+  });
+  const sniper = deployment.deploy('sniper', { x: 1, y: 0 }).operator;
+  const enemy = new Enemy(DEFAULT_ENEMIES.drone, { pathId: 'main' });
+  enemy.cell = { x: 0, y: 0 };
+  sniper.attackTimer = 0;
+  sniper.skill.activeRemaining = 8;
+  const combat = createCombatSystem();
+
+  combat.tick(0.45, { operators: [sniper], enemies: [enemy] });
+
+  assert.equal(enemy.hp, 92);
+});
+
+test('combat system consumes caster next attack multiplier', () => {
+  const map = { width: 2, height: 1, grid: [['path', 'high']], initialCost: 30, maxCost: 30 };
+  const deployment = createDeploymentSystem({
+    map,
+    costSystem: createCostSystem({ initialCost: 30, maxCost: 30 }),
+    operatorCatalog: DEFAULT_OPERATORS
+  });
+  const caster = deployment.deploy('caster', { x: 1, y: 0 }).operator;
+  const enemy = new Enemy(DEFAULT_ENEMIES.infantry, { pathId: 'main' });
+  enemy.cell = { x: 0, y: 0 };
+  caster.skill.nextAttackMultiplier = 2.5;
+  const combat = createCombatSystem();
+
+  combat.tick(2.5, { operators: [caster], enemies: [enemy] });
+
+  assert.equal(enemy.hp, 0);
+  assert.equal(caster.skill.nextAttackMultiplier, null);
+});
+
 test('win lose evaluator distinguishes victory stars and defeat', () => {
   assert.equal(evaluateBattleResult({ lives: 0, leaks: 3, wavesComplete: false, enemiesRemaining: 2 }).state, 'defeat');
   assert.equal(evaluateBattleResult({ lives: 1, leaks: 0, wavesComplete: true, enemiesRemaining: 0 }).stars, 3);

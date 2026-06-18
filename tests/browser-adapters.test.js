@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateCanvasMetrics, tileColorForType } from '../src/renderers/CanvasRenderer.js';
-import { buildOperatorDeckModel, formatBattleTime } from '../src/ui/UIController.js';
+import { calculateCanvasMetrics, rangeCellsFor, tileColorForType } from '../src/renderers/CanvasRenderer.js';
+import { buildOperatorDeckModel, buildSkillPanelModel, formatBattleTime } from '../src/ui/UIController.js';
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
 
 test('calculateCanvasMetrics fits map into available canvas area', () => {
@@ -33,4 +33,29 @@ test('buildOperatorDeckModel marks unaffordable operators disabled', () => {
 
 test('formatBattleTime renders minute and second clock', () => {
   assert.equal(formatBattleTime(125.2), '02:05');
+});
+
+test('rangeCellsFor returns own cell for melee operators', () => {
+  assert.deepEqual(rangeCellsFor({ x: 2, y: 3 }, { type: 'melee', radius: 0 }), [{ x: 2, y: 3 }]);
+});
+
+test('buildSkillPanelModel exposes ready state for selected operator skill', () => {
+  const operator = {
+    skill: {
+      name: '战术补给',
+      description: '立刻回复6费用',
+      sp: 10,
+      spCost: 10,
+      activeRemaining: 0
+    }
+  };
+
+  assert.deepEqual(buildSkillPanelModel(operator), {
+    name: '战术补给',
+    description: '立刻回复6费用',
+    sp: 10,
+    spCost: 10,
+    ready: true,
+    activeRemaining: 0
+  });
 });
