@@ -1,0 +1,47 @@
+{
+  "version": "2.0",
+  "id": "training-ground",
+  "name": "新手训练场",
+  "description": "基础阻挡与远程覆盖教学。",
+  "width": 10,
+  "height": 6,
+  "initialCost": 12,
+  "maxCost": 30,
+  "maxLives": 10,
+  "totalWaves": 3,
+  "grid": [
+    ["wall", "high", "high", "wall", "wall", "high", "high", "wall", "wall", "wall"],
+    ["path", "path", "path", "path", "path", "path", "path", "path", "path", "path"],
+    ["wall", "high", "wall", "wall", "high", "wall", "wall", "high", "wall", "wall"],
+    ["wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall"],
+    ["wall", "wall", "high", "high", "wall", "high", "high", "wall", "wall", "wall"],
+    ["wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall"]
+  ],
+  "paths": [
+    {
+      "id": "main",
+      "name": "主通道",
+      "entry": { "x": 0, "y": 1 },
+      "exit": { "x": 9, "y": 1 },
+      "points": [
+        { "x": 0, "y": 1 },
+        { "x": 1, "y": 1 },
+        { "x": 2, "y": 1 },
+        { "x": 3, "y": 1 },
+        { "x": 4, "y": 1 },
+        { "x": 5, "y": 1 },
+        { "x": 6, "y": 1 },
+        { "x": 7, "y": 1 },
+        { "x": 8, "y": 1 },
+        { "x": 9, "y": 1 }
+      ],
+      "color": "#f6c445",
+      "lifeDamage": 1
+    }
+  ],
+  "timeline": [
+    { "wave": 1, "startTime": 2, "enemyType": "infantry", "count": 6, "interval": 1.0, "pathId": "main" },
+    { "wave": 2, "startTime": 18, "enemyType": "drone", "count": 4, "interval": 1.2, "pathId": "main" },
+    { "wave": 3, "startTime": 35, "enemyType": "heavy", "count": 3, "interval": 1.5, "pathId": "main" }
+  ]
+}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aknights Test</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="top-shell">
+        <div class="brand">RHODES-LIKE / FIELD TEST</div>
+        <select id="map-select" aria-label="选择地图"></select>
+        <div id="top-status" class="top-status"></div>
+      </header>
+
+      <main class="battle-shell">
+        <section class="battlefield-wrap">
+          <canvas id="battlefield" width="960" height="540"></canvas>
+          <div id="result-modal" class="result-modal hidden"></div>
+        </section>
+
+        <aside id="info-panel" class="info-panel"></aside>
+      </main>
+
+      <footer class="bottom-shell">
+        <div id="operator-deck" class="operator-deck"></div>
+        <div id="control-panel" class="control-panel">
+          <button id="start-button">开始</button>
+          <button id="pause-button">暂停</button>
+          <button id="speed-button">1x</button>
+          <button id="restart-button">重开</button>
+        </div>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

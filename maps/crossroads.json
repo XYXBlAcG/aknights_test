@@ -1,0 +1,65 @@
+{
+  "version": "2.0",
+  "id": "crossroads",
+  "name": "十字路口",
+  "description": "双线错峰推进，考验中心防线与高台覆盖。",
+  "width": 9,
+  "height": 7,
+  "initialCost": 10,
+  "maxCost": 30,
+  "maxLives": 8,
+  "totalWaves": 4,
+  "grid": [
+    ["wall", "wall", "high", "wall", "path", "wall", "high", "wall", "wall"],
+    ["wall", "high", "high", "wall", "path", "wall", "high", "high", "wall"],
+    ["path", "path", "path", "path", "path", "path", "path", "path", "path"],
+    ["wall", "wall", "high", "wall", "path", "wall", "high", "wall", "wall"],
+    ["wall", "high", "wall", "wall", "path", "wall", "wall", "high", "wall"],
+    ["wall", "high", "high", "wall", "path", "wall", "high", "high", "wall"],
+    ["wall", "wall", "wall", "wall", "path", "wall", "wall", "wall", "wall"]
+  ],
+  "paths": [
+    {
+      "id": "horizontal",
+      "name": "横向通道",
+      "entry": { "x": 0, "y": 2 },
+      "exit": { "x": 8, "y": 2 },
+      "points": [
+        { "x": 0, "y": 2 },
+        { "x": 1, "y": 2 },
+        { "x": 2, "y": 2 },
+        { "x": 3, "y": 2 },
+        { "x": 4, "y": 2 },
+        { "x": 5, "y": 2 },
+        { "x": 6, "y": 2 },
+        { "x": 7, "y": 2 },
+        { "x": 8, "y": 2 }
+      ],
+      "color": "#f6c445",
+      "lifeDamage": 1
+    },
+    {
+      "id": "vertical",
+      "name": "纵向通道",
+      "entry": { "x": 4, "y": 0 },
+      "exit": { "x": 4, "y": 6 },
+      "points": [
+        { "x": 4, "y": 0 },
+        { "x": 4, "y": 1 },
+        { "x": 4, "y": 2 },
+        { "x": 4, "y": 3 },
+        { "x": 4, "y": 4 },
+        { "x": 4, "y": 5 },
+        { "x": 4, "y": 6 }
+      ],
+      "color": "#5fc9ff",
+      "lifeDamage": 1
+    }
+  ],
+  "timeline": [
+    { "wave": 1, "startTime": 2, "enemyType": "infantry", "count": 5, "interval": 1.0, "pathId": "horizontal" },
+    { "wave": 2, "startTime": 14, "enemyType": "infantry", "count": 5, "interval": 0.9, "pathId": "vertical" },
+    { "wave": 3, "startTime": 28, "enemyType": "drone", "count": 5, "interval": 1.0, "pathId": "horizontal" },
+    { "wave": 4, "startTime": 42, "enemyType": "heavy", "count": 4, "interval": 1.4, "pathId": "vertical" }
+  ]
+}

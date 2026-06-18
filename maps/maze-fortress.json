@@ -1,0 +1,82 @@
+{
+  "version": "2.0",
+  "id": "maze-fortress",
+  "name": "迷宫要塞",
+  "description": "长路径与混合威胁，要求提前建立稳定火力区。",
+  "width": 12,
+  "height": 8,
+  "initialCost": 15,
+  "maxCost": 35,
+  "maxLives": 5,
+  "totalWaves": 5,
+  "grid": [
+    ["path", "path", "path", "path", "wall", "high", "high", "wall", "wall", "wall", "wall", "wall"],
+    ["wall", "high", "wall", "path", "wall", "high", "wall", "wall", "path", "path", "path", "path"],
+    ["wall", "high", "wall", "path", "path", "path", "path", "path", "path", "wall", "high", "path"],
+    ["wall", "high", "wall", "wall", "wall", "high", "wall", "wall", "wall", "wall", "high", "path"],
+    ["wall", "high", "high", "high", "wall", "high", "high", "high", "wall", "path", "path", "path"],
+    ["wall", "wall", "wall", "path", "path", "path", "wall", "high", "wall", "path", "wall", "wall"],
+    ["path", "path", "path", "path", "wall", "path", "path", "path", "path", "path", "high", "wall"],
+    ["wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall"]
+  ],
+  "paths": [
+    {
+      "id": "maze-main",
+      "name": "迷宫主线",
+      "entry": { "x": 0, "y": 0 },
+      "exit": { "x": 11, "y": 1 },
+      "points": [
+        { "x": 0, "y": 0 },
+        { "x": 1, "y": 0 },
+        { "x": 2, "y": 0 },
+        { "x": 3, "y": 0 },
+        { "x": 3, "y": 1 },
+        { "x": 3, "y": 2 },
+        { "x": 4, "y": 2 },
+        { "x": 5, "y": 2 },
+        { "x": 6, "y": 2 },
+        { "x": 7, "y": 2 },
+        { "x": 8, "y": 2 },
+        { "x": 8, "y": 1 },
+        { "x": 9, "y": 1 },
+        { "x": 10, "y": 1 },
+        { "x": 11, "y": 1 }
+      ],
+      "color": "#f6c445",
+      "lifeDamage": 1
+    },
+    {
+      "id": "lower-flank",
+      "name": "下层侧线",
+      "entry": { "x": 0, "y": 6 },
+      "exit": { "x": 11, "y": 4 },
+      "points": [
+        { "x": 0, "y": 6 },
+        { "x": 1, "y": 6 },
+        { "x": 2, "y": 6 },
+        { "x": 3, "y": 6 },
+        { "x": 3, "y": 5 },
+        { "x": 4, "y": 5 },
+        { "x": 5, "y": 5 },
+        { "x": 5, "y": 6 },
+        { "x": 6, "y": 6 },
+        { "x": 7, "y": 6 },
+        { "x": 8, "y": 6 },
+        { "x": 9, "y": 6 },
+        { "x": 9, "y": 5 },
+        { "x": 9, "y": 4 },
+        { "x": 10, "y": 4 },
+        { "x": 11, "y": 4 }
+      ],
+      "color": "#5fc9ff",
+      "lifeDamage": 1
+    }
+  ],
+  "timeline": [
+    { "wave": 1, "startTime": 2, "enemyType": "infantry", "count": 8, "interval": 0.8, "pathId": "maze-main" },
+    { "wave": 2, "startTime": 16, "enemyType": "heavy", "count": 3, "interval": 1.4, "pathId": "maze-main" },
+    { "wave": 3, "startTime": 30, "enemyType": "drone", "count": 6, "interval": 0.9, "pathId": "lower-flank" },
+    { "wave": 4, "startTime": 45, "enemyType": "infantry", "count": 8, "interval": 0.7, "pathId": "lower-flank" },
+    { "wave": 5, "startTime": 60, "enemyType": "heavy", "count": 5, "interval": 1.2, "pathId": "maze-main" }
+  ]
+}
