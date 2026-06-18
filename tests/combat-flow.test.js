@@ -70,7 +70,61 @@ test('enemy runtime applies first phase stats when phases are present', () => {
   assert.equal(enemy.hp, 60);
   assert.equal(enemy.defense, 20);
   assert.equal(enemy.color, '#85a6ff');
+  assert.equal(enemy.attackTimer, enemy.attackInterval);
   assert.equal(enemy.phases.length, 2);
+});
+
+test('enemy runtime phase advancement falls back to base optional fields', () => {
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.heavy,
+    id: 'phase-fallback-heavy',
+    damageType: 'physical',
+    range: { type: 'melee', radius: 0 },
+    color: '#base',
+    canBeBlocked: true,
+    description: 'base',
+    phases: [{
+      name: '术式外壳',
+      maxHp: 60,
+      attack: 18,
+      defense: 16,
+      resistance: 0.2,
+      speed: 0.5,
+      attackInterval: 2,
+      damageType: 'arts',
+      range: { type: 'diamond', radius: 2 },
+      color: '#phase',
+      canBeBlocked: false,
+      description: 'phase zero'
+    }, {
+      name: '核心暴露',
+      maxHp: 40,
+      attack: 24,
+      defense: 4,
+      resistance: 0,
+      speed: 1.2,
+      attackInterval: 1.2
+    }]
+  }, { pathId: 'main' });
+
+  assert.equal(enemy.hasMorePhases, true);
+  assert.equal(enemy.damageType, 'arts');
+  assert.deepEqual(enemy.range, { type: 'diamond', radius: 2 });
+  assert.equal(enemy.color, '#phase');
+  assert.equal(enemy.canBeBlocked, false);
+  assert.equal(enemy.description, 'phase zero');
+
+  enemy.blockedBy = 'defender-1';
+  assert.equal(enemy.advancePhase(), true);
+
+  assert.equal(enemy.phaseIndex, 1);
+  assert.equal(enemy.hasMorePhases, false);
+  assert.equal(enemy.damageType, 'physical');
+  assert.deepEqual(enemy.range, { type: 'melee', radius: 0 });
+  assert.equal(enemy.color, '#base');
+  assert.equal(enemy.canBeBlocked, true);
+  assert.equal(enemy.description, 'base');
+  assert.equal(enemy.blockedBy, 'defender-1');
 });
 
 test('combat system lets ranged operators damage enemies in range', () => {

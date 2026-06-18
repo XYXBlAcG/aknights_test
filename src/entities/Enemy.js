@@ -29,7 +29,7 @@ export class Enemy {
     this.blockBypass = template.blockBypass ?? 0;
     this.description = template.description ?? '';
     if (this.phases.length > 0) {
-      this.applyPhase(0);
+      this.applyPhase(0, { resetAttackTimer: true });
     }
     this.pathId = pathId;
     this.wave = wave;
@@ -46,26 +46,28 @@ export class Enemy {
     return this.hp <= 0;
   }
 
-  applyPhase(index) {
+  applyPhase(index, { resetAttackTimer = false } = {}) {
     const phase = this.phases[index];
     if (!phase) {
       return;
     }
+    const base = this.baseTemplate;
     this.phaseIndex = index;
-    this.maxHp = phase.maxHp;
-    this.hp = phase.maxHp;
-    this.attack = phase.attack;
-    this.defense = phase.defense;
-    this.resistance = phase.resistance ?? 0;
-    this.speed = phase.speed;
-    this.attackInterval = phase.attackInterval;
-    this.attackTimer = Math.min(this.attackTimer ?? this.attackInterval, this.attackInterval);
-    this.damageType = phase.damageType ?? this.damageType;
-    this.range = phase.range ?? this.range;
-    this.color = phase.color ?? this.color;
-    if (phase.canBeBlocked !== undefined) {
-      this.canBeBlocked = phase.canBeBlocked;
-    }
+    this.maxHp = phase.maxHp ?? base.maxHp;
+    this.hp = this.maxHp;
+    this.attack = phase.attack ?? base.attack;
+    this.defense = phase.defense ?? base.defense;
+    this.resistance = phase.resistance ?? base.resistance ?? 0;
+    this.speed = phase.speed ?? base.speed;
+    this.attackInterval = phase.attackInterval ?? base.attackInterval;
+    this.attackTimer = resetAttackTimer
+      ? this.attackInterval
+      : Math.min(this.attackTimer ?? this.attackInterval, this.attackInterval);
+    this.damageType = phase.damageType ?? base.damageType ?? 'physical';
+    this.range = phase.range ?? base.range ?? { type: 'melee', radius: 0 };
+    this.color = phase.color ?? base.color;
+    this.canBeBlocked = phase.canBeBlocked ?? base.canBeBlocked;
+    this.description = phase.description ?? base.description ?? '';
   }
 
   advancePhase() {

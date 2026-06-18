@@ -47,7 +47,8 @@ export function normalizeEnemyTemplate(template) {
   const damageType = oneOf(template?.damageType ?? 'physical', ENEMY_DAMAGE_TYPES, 'enemy damage type');
   const targeting = oneOf(template?.targeting ?? 'blocked-first', ENEMY_TARGETING_TYPES, 'enemy targeting');
   const range = normalizeRange(template?.range ?? { type: 'melee', radius: 0 });
-  const phases = normalizeEnemyPhases(template?.phases ?? []);
+  const phaseSource = Object.hasOwn(template ?? {}, 'phases') ? template.phases : [];
+  const phases = normalizeEnemyPhases(phaseSource);
 
   return {
     id: normalizeId(template?.id, 'enemy id'),
@@ -181,13 +182,13 @@ function normalizeEnemyPhases(phases) {
     resistance: numberInRange(phase?.resistance ?? 0, 0, 0.95, 'phase resistance'),
     speed: numberInRange(phase?.speed, 0.01, 20, 'phase speed'),
     attackInterval: numberInRange(phase?.attackInterval ?? 1.5, 0.1, 60, 'phase attack interval'),
-    canBeBlocked: 'canBeBlocked' in phase ? Boolean(phase.canBeBlocked) : undefined,
+    canBeBlocked: Object.hasOwn(phase ?? {}, 'canBeBlocked') ? Boolean(phase.canBeBlocked) : undefined,
     damageType: phase?.damageType
       ? oneOf(phase.damageType, ENEMY_DAMAGE_TYPES, 'phase damage type')
       : undefined,
     range: phase?.range ? normalizeRange(phase.range) : undefined,
     color: phase?.color ? nonEmptyString(phase.color, 'phase color') : undefined,
-    description: String(phase?.description ?? '')
+    description: Object.hasOwn(phase ?? {}, 'description') ? String(phase.description ?? '') : undefined
   }));
 }
 

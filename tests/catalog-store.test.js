@@ -99,6 +99,23 @@ test('enemy templates normalize range damage bypass and phases', () => {
   assert.equal(enemy.phases[0].description, '破防后移动速度提升。');
 });
 
+test('enemy phases must be an array when explicitly provided', () => {
+  const withoutPhases = normalizeEnemyTemplate({
+    ...DEFAULT_ENEMIES.heavy,
+    id: 'no-phases-heavy'
+  });
+
+  assert.deepEqual(withoutPhases.phases, []);
+  assert.throws(
+    () => normalizeEnemyTemplate({
+      ...DEFAULT_ENEMIES.heavy,
+      id: 'null-phases-heavy',
+      phases: null
+    }),
+    /enemy phases must be an array/
+  );
+});
+
 test('operator normalization migrates legacy skill into a three-skill list', () => {
   const operator = normalizeOperatorTemplate({
     ...DEFAULT_OPERATORS.guard,
