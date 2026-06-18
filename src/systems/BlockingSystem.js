@@ -4,22 +4,37 @@ export function createBlockingSystem() {
   return new BlockingSystem();
 }
 
+export function isValidBlock(enemy, operator) {
+  return !enemy.isDead
+    && !enemy.isFlying
+    && enemy.canBeBlocked !== false
+    && !operator.isDead
+    && operator.deployType === 'ground'
+    && (enemy.blockBypass ?? 0) <= operator.block
+    && isSameCell(operator.cell, enemy.cell);
+}
+
 export class BlockingSystem {
-  update(operators, enemies) {
-    const activeOperators = operators.filter((operator) => !operator.isDead);
-    const activeOperatorIds = new Set(activeOperators.map((operator) => operator.id));
+  clearInvalidBlocks(operators, enemies) {
+    const operatorsById = new Map(operators.map((operator) => [operator.id, operator]));
 
     enemies.forEach((enemy) => {
-      if (enemy.blockedBy && !activeOperatorIds.has(enemy.blockedBy)) {
+      if (!enemy.blockedBy) {
+        return;
+      }
+
+      const operator = operatorsById.get(enemy.blockedBy);
+      if (!operator || !isValidBlock(enemy, operator)) {
         enemy.blockedBy = null;
       }
     });
 
-    activeOperators.forEach((operator) => {
-      operator.blockedEnemies = enemies.filter((enemy) => {
-        return enemy.blockedBy === operator.id && !enemy.isDead && isSameCell(enemy.cell, operator.cell);
-      });
-    });
+    syncBlockedEnemies(operators, enemies);
+  }
+
+  update(operators, enemies) {
+    this.clearInvalidBlocks(operators, enemies);
+    const activeOperators = operators.filter((operator) => !operator.isDead);
 
     enemies.forEach((enemy) => {
       if (enemy.isDead || enemy.isFlying || enemy.canBeBlocked === false || enemy.blockedBy) {
@@ -27,10 +42,7 @@ export class BlockingSystem {
       }
 
       const blocker = activeOperators.find((operator) => {
-        return operator.deployType === 'ground'
-          && operator.canBlockMore()
-          && (enemy.blockBypass ?? 0) <= operator.block
-          && isSameCell(operator.cell, enemy.cell);
+        return operator.canBlockMore() && isValidBlock(enemy, operator);
       });
 
       if (!blocker) {
@@ -41,4 +53,12 @@ export class BlockingSystem {
       blocker.blockedEnemies.push(enemy);
     });
   }
+}
+
+function syncBlockedEnemies(operators, enemies) {
+  operators.forEach((operator) => {
+    operator.blockedEnemies = enemies.filter((enemy) => {
+      return enemy.blockedBy === operator.id && isValidBlock(enemy, operator);
+    });
+  });
 }

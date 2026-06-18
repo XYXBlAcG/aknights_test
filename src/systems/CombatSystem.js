@@ -1,5 +1,6 @@
 import { isCellInRange } from '../utils/RangeMath.js';
-import { isSameCell, manhattanDistance } from '../utils/GridMath.js';
+import { manhattanDistance } from '../utils/GridMath.js';
+import { isValidBlock } from './BlockingSystem.js';
 import {
   consumeNextAttackSkill,
   getEffectiveAttack,
@@ -196,6 +197,6 @@ function getEnemyBlocker(enemy, operators) {
 }
 
 function isEnemyBlockedByOperator(enemy, operator) {
-  return isSameCell(enemy.cell, operator.cell)
+  return isValidBlock(enemy, operator)
     && operator.blockedEnemies.some((blockedEnemy) => blockedEnemy === enemy || blockedEnemy.id === enemy.id);
 }

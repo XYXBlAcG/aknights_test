@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Game } from '../src/core/Game.js';
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
 import { DEFAULT_ENEMIES } from '../src/data/defaultEnemies.js';
+import { Enemy } from '../src/entities/Enemy.js';
 
 const map = {
   version: '2.0',
@@ -31,6 +32,41 @@ test('game can deploy, tick, and expose UI state', () => {
   assert.equal(state.operators.length, 1);
   assert.equal(state.enemies.length, 1);
   assert.equal(state.status, 'running');
+});
+
+test('game clears stale enemy blockers before movement', () => {
+  const movementMap = {
+    version: '2.0',
+    id: 'stale-block-move',
+    name: 'Stale Block Move',
+    width: 4,
+    height: 1,
+    initialCost: 30,
+    maxCost: 30,
+    maxLives: 2,
+    totalWaves: 1,
+    grid: [['path', 'path', 'path', 'path']],
+    paths: [{ id: 'main', points: [{ x: 0, y: 0 }, { x: 3, y: 0 }], lifeDamage: 1 }],
+    timeline: []
+  };
+  const game = new Game({ map: movementMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+  const vanguard = game.deployOperator('vanguard', { x: 3, y: 0 }).operator;
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.infantry,
+    id: 'stale-zero-attack',
+    attack: 0
+  }, { pathId: 'main' });
+  game.placeEnemyAtPathDistance(enemy, 0);
+  enemy.blockedBy = vanguard.id;
+  vanguard.blockedEnemies = [];
+  game.enemies.push(enemy);
+
+  game.start();
+  game.tick(1);
+
+  assert.equal(enemy.blockedBy, null);
+  assert.equal(vanguard.hp, vanguard.maxHp);
+  assert.equal(enemy.pathDistance > 0, true);
 });
 
 test('game cycles speed through configured multipliers', () => {

@@ -64,6 +64,30 @@ test('blocking ignores enemies whose block bypass exceeds operator block', () =>
   assert.equal(vanguard.blockedEnemies.length, 0);
 });
 
+test('blocking clears existing blocks whose bypass exceeds operator block', () => {
+  const map = { width: 1, height: 1, grid: [['path']], initialCost: 30, maxCost: 30 };
+  const deployment = createDeploymentSystem({
+    map,
+    costSystem: createCostSystem({ initialCost: 30, maxCost: 30 }),
+    operatorCatalog: DEFAULT_OPERATORS
+  });
+  const vanguard = deployment.deploy('vanguard', { x: 0, y: 0 }).operator;
+  const enemy = {
+    id: 'stale-bypass-1',
+    cell: { x: 0, y: 0 },
+    isFlying: false,
+    canBeBlocked: true,
+    blockBypass: 3,
+    blockedBy: vanguard.id,
+    isDead: false
+  };
+
+  createBlockingSystem().update([vanguard], [enemy]);
+
+  assert.equal(enemy.blockedBy, null);
+  assert.equal(vanguard.blockedEnemies.length, 0);
+});
+
 test('enemy runtime applies first phase stats when phases are present', () => {
   const enemy = new Enemy({
     ...DEFAULT_ENEMIES.heavy,

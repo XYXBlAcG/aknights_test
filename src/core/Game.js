@@ -198,6 +198,7 @@ export class Game {
       costSystem: this.costSystem,
       operators: this.deploymentSystem.operators
     });
+    this.blockingSystem.clearInvalidBlocks(this.deploymentSystem.operators, this.enemies);
     this.moveEnemies(scaledDelta);
     this.blockingSystem.update(this.deploymentSystem.operators, this.enemies);
 
