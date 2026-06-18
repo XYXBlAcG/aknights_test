@@ -183,11 +183,11 @@ function normalizeEnemyPhases(phases) {
     speed: numberInRange(phase?.speed, 0.01, 20, 'phase speed'),
     attackInterval: numberInRange(phase?.attackInterval ?? 1.5, 0.1, 60, 'phase attack interval'),
     canBeBlocked: Object.hasOwn(phase ?? {}, 'canBeBlocked') ? Boolean(phase.canBeBlocked) : undefined,
-    damageType: phase?.damageType
+    damageType: Object.hasOwn(phase ?? {}, 'damageType')
       ? oneOf(phase.damageType, ENEMY_DAMAGE_TYPES, 'phase damage type')
       : undefined,
-    range: phase?.range ? normalizeRange(phase.range) : undefined,
-    color: phase?.color ? nonEmptyString(phase.color, 'phase color') : undefined,
+    range: Object.hasOwn(phase ?? {}, 'range') ? normalizeRange(phase.range) : undefined,
+    color: Object.hasOwn(phase ?? {}, 'color') ? nonEmptyString(phase.color, 'phase color') : undefined,
     description: Object.hasOwn(phase ?? {}, 'description') ? String(phase.description ?? '') : undefined
   }));
 }

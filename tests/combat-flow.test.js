@@ -127,6 +127,39 @@ test('enemy runtime phase advancement falls back to base optional fields', () =>
   assert.equal(enemy.blockedBy, 'defender-1');
 });
 
+test('enemy runtime clears blocker when advancing into unblockable phase', () => {
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.heavy,
+    id: 'unblockable-phase-heavy',
+    canBeBlocked: true,
+    phases: [{
+      name: '装甲外壳',
+      maxHp: 60,
+      attack: 12,
+      defense: 20,
+      resistance: 0.1,
+      speed: 0.4,
+      attackInterval: 2.2,
+      canBeBlocked: true
+    }, {
+      name: '高速突袭',
+      maxHp: 40,
+      attack: 24,
+      defense: 4,
+      resistance: 0,
+      speed: 1.2,
+      attackInterval: 1.2,
+      canBeBlocked: false
+    }]
+  }, { pathId: 'main' });
+
+  enemy.blockedBy = 'defender-1';
+  assert.equal(enemy.advancePhase(), true);
+
+  assert.equal(enemy.canBeBlocked, false);
+  assert.equal(enemy.blockedBy, null);
+});
+
 test('combat system lets ranged operators damage enemies in range', () => {
   const map = { width: 2, height: 1, grid: [['path', 'high']], initialCost: 30, maxCost: 30 };
   const deployment = createDeploymentSystem({

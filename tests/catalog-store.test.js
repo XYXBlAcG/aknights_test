@@ -116,6 +116,39 @@ test('enemy phases must be an array when explicitly provided', () => {
   );
 });
 
+test('enemy phase damage type rejects explicit malformed values', () => {
+  assert.throws(
+    () => normalizeEnemyTemplate({
+      ...DEFAULT_ENEMIES.heavy,
+      id: 'bad-phase-damage',
+      phases: [{ name: 'bad', maxHp: 1, speed: 1, damageType: '' }]
+    }),
+    /phase damage type must be one of/
+  );
+});
+
+test('enemy phase range rejects explicit malformed values', () => {
+  assert.throws(
+    () => normalizeEnemyTemplate({
+      ...DEFAULT_ENEMIES.heavy,
+      id: 'bad-phase-range',
+      phases: [{ name: 'bad', maxHp: 1, speed: 1, range: null }]
+    }),
+    /Range must be an object/
+  );
+});
+
+test('enemy phase color rejects explicit malformed values', () => {
+  assert.throws(
+    () => normalizeEnemyTemplate({
+      ...DEFAULT_ENEMIES.heavy,
+      id: 'bad-phase-color',
+      phases: [{ name: 'bad', maxHp: 1, speed: 1, color: '' }]
+    }),
+    /phase color must be a non-empty string/
+  );
+});
+
 test('operator normalization migrates legacy skill into a three-skill list', () => {
   const operator = normalizeOperatorTemplate({
     ...DEFAULT_OPERATORS.guard,
