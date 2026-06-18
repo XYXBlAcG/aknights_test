@@ -397,3 +397,18 @@ test('map deploy limit overrides global deploy limit', () => {
   assert.match(game.canDeploy('guard', { x: 1, y: 0 }).reason, /Total deploy limit/);
   assert.equal(game.getState().deployLimit, 1);
 });
+
+test('game queues enemy intel once per enemy type', () => {
+  const intelMap = {
+    ...map,
+    timeline: [{ wave: 1, startTime: 0, enemyType: 'infantry', count: 2, interval: 0.1, pathId: 'main' }]
+  };
+  const game = new Game({ map: intelMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+
+  game.start();
+  game.tick(0.2);
+
+  const state = game.getState();
+  assert.equal(state.enemyIntelQueue.length, 1);
+  assert.equal(state.enemyIntelQueue[0].id, 'infantry');
+});

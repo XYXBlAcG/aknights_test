@@ -4,6 +4,7 @@ import { calculateCanvasMetrics, rangeCellsFor, tileColorForType } from '../src/
 import {
   buildOperatorDeckModel,
   buildRenderKeys,
+  buildEnemyIntelModel,
   buildOperatorSpBarModel,
   buildSkillPanelModel,
   formatBattleTime,
@@ -370,4 +371,28 @@ test('operator deck model uses map deploy limit for custom class fallback', () =
   assert.equal(card.limit, 10);
   assert.equal(card.disabledReason, '');
   assert.equal(card.disabled, false);
+});
+
+test('enemy intel model summarizes range and traits', () => {
+  const model = buildEnemyIntelModel({
+    id: 'caster',
+    name: '术式兵',
+    maxHp: 120,
+    attack: 30,
+    defense: 5,
+    resistance: 0.2,
+    speed: 0.8,
+    range: { type: 'diamond', radius: 2 },
+    damageType: 'arts',
+    isFlying: false,
+    canBeBlocked: true,
+    blockBypass: 2,
+    elite: true,
+    boss: false,
+    description: '远程法术攻击。'
+  });
+
+  assert.equal(model.name, '术式兵');
+  assert.equal(model.rangeSummary, '菱形2');
+  assert.deepEqual(model.traits, ['法术', '远程', '防阻挡2', '精英']);
 });

@@ -61,6 +61,8 @@ export class Game {
     this.combatSystem = createCombatSystem();
     this.effectSystem = createEffectSystem();
     this.warnedWaveEvents = new Set();
+    this.seenEnemyTypes = new Set();
+    this.enemyIntelQueue = [];
     this.enemies = [];
     this.status = 'ready';
     this.lives = this.map.maxLives;
@@ -218,6 +220,7 @@ export class Game {
     waveResult.spawned.forEach((enemy) => {
       this.placeEnemyAtPathDistance(enemy, 0);
       this.enemies.push(enemy);
+      this.queueEnemyIntel(enemy.templateId);
     });
 
     this.costSystem.tick(scaledDelta, this.deploymentSystem.operators);
@@ -303,8 +306,25 @@ export class Game {
       selectedOperatorId: this.selectedOperatorId,
       hoverCell: this.hoverCell,
       redeployCooldowns: { ...this.deploymentSystem.redeployCooldowns },
-      deployLimit: this.deploymentSystem.totalLimit
+      deployLimit: this.deploymentSystem.totalLimit,
+      enemyIntelQueue: this.enemyIntelQueue.map((enemy) => structuredClone(enemy))
     };
+  }
+
+  queueEnemyIntel(templateId) {
+    if (this.seenEnemyTypes.has(templateId)) {
+      return;
+    }
+    const template = this.enemyCatalog[templateId];
+    if (!template) {
+      return;
+    }
+    this.seenEnemyTypes.add(templateId);
+    this.enemyIntelQueue.push(template);
+  }
+
+  dismissEnemyIntel(templateId) {
+    this.enemyIntelQueue = this.enemyIntelQueue.filter((enemy) => enemy.id !== templateId);
   }
 
   isEnded() {

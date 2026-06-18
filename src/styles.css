@@ -892,6 +892,75 @@ button:disabled {
   margin-top: 8px;
 }
 
+.enemy-intel-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 148px;
+  width: 280px;
+  z-index: 20;
+  padding: 14px;
+  border: 1px solid #5fc9ff;
+  background: rgba(11, 15, 21, 0.94);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+
+.enemy-intel-panel.hidden {
+  display: none;
+}
+
+.enemy-intel-panel h2 {
+  margin: 0 28px 10px 0;
+  font-size: 16px;
+}
+
+.enemy-intel-panel dl {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.enemy-intel-panel dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.enemy-intel-panel dt {
+  color: #7f90a5;
+}
+
+.enemy-intel-panel dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.enemy-intel-panel p {
+  margin: 0 0 10px;
+  color: #9fb0c4;
+  font-size: 12px;
+}
+
+.enemy-intel-close {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 26px;
+  height: 26px;
+}
+
+.enemy-intel-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.enemy-intel-tags span {
+  padding: 2px 6px;
+  border: 1px solid #344454;
+  color: #f6c445;
+  font-size: 11px;
+}
+
 @media (max-width: 1100px) {
   #editor-app {
     grid-template-rows: auto 1fr;

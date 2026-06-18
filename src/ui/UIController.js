@@ -93,6 +93,34 @@ export function buildSkillPanelModel(operator) {
   }));
 }
 
+export function buildEnemyIntelModel(enemy) {
+  if (!enemy) {
+    return null;
+  }
+  const rangeSummary = summarizeRange(enemy.range);
+  const traits = [];
+  if (enemy.damageType === 'arts') traits.push('法术');
+  if (enemy.range && enemy.range.type !== 'melee') traits.push('远程');
+  if (enemy.isFlying) traits.push('飞行');
+  if (enemy.canBeBlocked === false) traits.push('不可阻挡');
+  if ((enemy.blockBypass ?? 0) > 0) traits.push(`防阻挡${enemy.blockBypass}`);
+  if (enemy.elite) traits.push('精英');
+  if (enemy.boss) traits.push('Boss');
+  return {
+    id: enemy.id,
+    name: enemy.name,
+    maxHp: enemy.maxHp,
+    attack: enemy.attack,
+    defense: enemy.defense,
+    resistance: enemy.resistance,
+    speed: enemy.speed,
+    rangeSummary,
+    traits,
+    description: enemy.description ?? '',
+    phaseCount: enemy.phases?.length ?? 0
+  };
+}
+
 export function buildRenderKeys(state, message = '') {
   const selected = state.operators.find((operator) => operator.id === state.selectedOperatorId);
   const operatorDeckData = buildOperatorDeckModel(state).map((operator) => [
@@ -157,7 +185,25 @@ export function buildRenderKeys(state, message = '') {
       state.kills,
       state.leaks,
       state.lives
-    ])
+    ]),
+    enemyIntel: JSON.stringify((state.enemyIntelQueue ?? []).map((enemy) => [
+      enemy.id,
+      enemy.name,
+      enemy.maxHp,
+      enemy.attack,
+      enemy.defense,
+      enemy.resistance,
+      enemy.speed,
+      summarizeRange(enemy.range),
+      enemy.damageType,
+      enemy.isFlying,
+      enemy.canBeBlocked,
+      enemy.blockBypass,
+      enemy.elite,
+      enemy.boss,
+      enemy.description,
+      enemy.phases?.length ?? 0
+    ]))
   };
 }
 
@@ -198,6 +244,7 @@ export class UIController {
     this.infoPanel = this.root.querySelector('#info-panel');
     this.controlPanel = this.root.querySelector('#control-panel');
     this.resultModal = this.root.querySelector('#result-modal');
+    this.enemyIntelPanel = this.root.querySelector('#enemy-intel-panel');
     this.mapSelect = this.root.querySelector('#map-select');
     this.mapImportButton = this.root.querySelector('#map-import-button');
     this.mapImportInput = this.root.querySelector('#map-import-input');
@@ -262,6 +309,15 @@ export class UIController {
 
     this.speedButton.addEventListener('click', () => {
       this.game.cycleSpeed();
+      this.sync();
+    });
+
+    this.root.addEventListener('pointerdown', (event) => {
+      const button = event.target.closest('[data-enemy-intel-close]');
+      if (!button) {
+        return;
+      }
+      this.game.dismissEnemyIntel(button.dataset.enemyIntelClose);
       this.sync();
     });
 
@@ -388,6 +444,7 @@ export class UIController {
     this.renderIfChanged('infoPanel', keys.infoPanel, () => this.renderInfoPanel(state));
     this.renderIfChanged('controls', keys.controls, () => this.renderControls(state));
     this.renderIfChanged('result', keys.result, () => this.renderResult(state));
+    this.renderIfChanged('enemyIntel', keys.enemyIntel, () => this.renderEnemyIntel(state));
     this.renderer.render({ ...state, pendingDeployment: this.pendingDeployment });
   }
 
@@ -546,6 +603,36 @@ export class UIController {
       this.game.restart();
       this.sync();
     }, { once: true });
+  }
+
+  renderEnemyIntel(state) {
+    const model = buildEnemyIntelModel(state.enemyIntelQueue?.[0]);
+    if (!this.enemyIntelPanel) {
+      this.enemyIntelPanel = document.createElement('aside');
+      this.enemyIntelPanel.id = 'enemy-intel-panel';
+      this.enemyIntelPanel.className = 'enemy-intel-panel hidden';
+      this.root.appendChild(this.enemyIntelPanel);
+    }
+    if (!model) {
+      this.enemyIntelPanel.classList.add('hidden');
+      this.enemyIntelPanel.innerHTML = '';
+      return;
+    }
+    this.enemyIntelPanel.classList.remove('hidden');
+    this.enemyIntelPanel.innerHTML = `
+      <button class="enemy-intel-close" data-enemy-intel-close="${model.id}">×</button>
+      <h2>${model.name}</h2>
+      <dl>
+        <div><dt>生命</dt><dd>${model.maxHp}${model.phaseCount > 0 ? ` / ${model.phaseCount}阶段` : ''}</dd></div>
+        <div><dt>攻击</dt><dd>${model.attack}</dd></div>
+        <div><dt>防御</dt><dd>${model.defense}</dd></div>
+        <div><dt>法抗</dt><dd>${Math.round(model.resistance * 100)}%</dd></div>
+        <div><dt>速度</dt><dd>${model.speed}</dd></div>
+        <div><dt>范围</dt><dd>${model.rangeSummary}</dd></div>
+      </dl>
+      <p>${model.description}</p>
+      <div class="enemy-intel-tags">${model.traits.map((trait) => `<span>${trait}</span>`).join('')}</div>
+    `;
   }
 }
 
