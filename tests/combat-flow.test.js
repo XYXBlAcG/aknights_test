@@ -427,3 +427,31 @@ test('operator damage advances enemy phase before final death', () => {
   assert.equal(result.phaseChangedEnemies[0], enemy);
   assert.equal(result.killedEnemies.length, 0);
 });
+
+test('operator phase break into unblockable phase clears stale blocker list', () => {
+  const guard = new Operator({
+    ...DEFAULT_OPERATORS.guard,
+    id: 'unblockable-breaker',
+    attack: 100,
+    attackInterval: 1
+  }, { x: 0, y: 0 });
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.heavy,
+    id: 'unblockable-two-bar',
+    phases: [
+      { name: 'shell', maxHp: 30, attack: 0, defense: 0, resistance: 0, speed: 1, attackInterval: 1, canBeBlocked: true },
+      { name: 'dash', maxHp: 40, attack: 0, defense: 0, resistance: 0, speed: 1, attackInterval: 1, canBeBlocked: false }
+    ]
+  }, { pathId: 'main' });
+  enemy.cell = { x: 0, y: 0 };
+  enemy.blockedBy = guard.id;
+  guard.blockedEnemies = [enemy];
+  guard.attackTimer = 1;
+
+  const result = createCombatSystem().tick(1, { operators: [guard], enemies: [enemy] });
+
+  assert.equal(enemy.blockedBy, null);
+  assert.equal(guard.blockedEnemies.includes(enemy), false);
+  assert.equal(result.phaseChangedEnemies[0], enemy);
+  assert.equal(result.killedEnemies.length, 0);
+});

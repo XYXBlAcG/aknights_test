@@ -264,6 +264,17 @@ test('multi-phase enemy rewards cost only after final phase death', () => {
     maxCost: 50,
     timeline: []
   };
+  const operatorCatalog = {
+    rewardGuard: {
+      ...DEFAULT_OPERATORS.guard,
+      id: 'rewardGuard',
+      cost: 0,
+      attack: 100,
+      attackInterval: 1,
+      skill: null,
+      skills: []
+    }
+  };
   const enemy = new Enemy({
     ...DEFAULT_ENEMIES.infantry,
     id: 'reward-phase',
@@ -273,10 +284,24 @@ test('multi-phase enemy rewards cost only after final phase death', () => {
       { name: 'second', maxHp: 1, attack: 0, defense: 0, resistance: 0, speed: 1, attackInterval: 1, color: '#d89d4a' }
     ]
   }, { pathId: 'main' });
-  const game = new Game({ map: phaseMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+  const game = new Game({ map: phaseMap, operatorCatalog, enemyCatalog: DEFAULT_ENEMIES });
+  const guard = game.deployOperator('rewardGuard', { x: 0, y: 0 }).operator;
+  game.placeEnemyAtPathDistance(enemy, 0);
+  enemy.blockedBy = guard.id;
+  guard.blockedEnemies = [enemy];
   game.enemies.push(enemy);
-  game.handleEnemyKilled(enemy);
+  game.start();
+
+  const initialCost = game.getState().cost;
+
+  game.tick(0);
+
+  assert.equal(game.getState().kills, 0);
+  assert.equal(game.getState().cost, initialCost);
+
+  guard.attackTimer = guard.attackInterval;
+  game.tick(0);
 
   assert.equal(game.getState().kills, 1);
-  assert.equal(game.getState().cost, 39);
+  assert.equal(game.getState().cost, initialCost + 9);
 });

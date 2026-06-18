@@ -47,7 +47,7 @@ export class CombatSystem {
         return;
       }
 
-      const outcome = applyDamageToEnemy(target, calculateDamage(operator, target));
+      const outcome = applyDamageToEnemy(target, calculateDamage(operator, target), operators);
       consumeNextAttackSkill(operator);
       operator.attackTimer = 0;
       if (outcome === 'phase_changed') {
@@ -101,17 +101,38 @@ export class CombatSystem {
   }
 }
 
-function applyDamageToEnemy(enemy, damage) {
+function applyDamageToEnemy(enemy, damage, operators = []) {
   enemy.hp -= damage;
   if (enemy.hp > 0) {
     return 'damaged';
   }
+  const previousBlockedBy = enemy.blockedBy;
   if (enemy.hasMorePhases && enemy.advancePhase()) {
+    syncPreviousBlockerAfterPhaseChange(operators, previousBlockedBy, enemy);
     return 'phase_changed';
   }
   enemy.hp = 0;
   enemy.blockedBy = null;
   return 'killed';
+}
+
+function syncPreviousBlockerAfterPhaseChange(operators, operatorId, enemy) {
+  if (!operatorId) {
+    return;
+  }
+  const operator = operators.find((item) => item.id === operatorId);
+  if (!operator) {
+    return;
+  }
+  if (enemy.blockedBy === operatorId && isValidBlock(enemy, operator)) {
+    return;
+  }
+  if (enemy.blockedBy === operatorId) {
+    enemy.blockedBy = null;
+  }
+  operator.blockedEnemies = operator.blockedEnemies.filter((blockedEnemy) => {
+    return blockedEnemy !== enemy && blockedEnemy.id !== enemy.id;
+  });
 }
 
 export function calculateDamage(attacker, target) {
