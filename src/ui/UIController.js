@@ -57,6 +57,64 @@ export function buildSkillPanelModel(operator) {
   };
 }
 
+export function buildRenderKeys(state, message = '') {
+  const selected = state.operators.find((operator) => operator.id === state.selectedOperatorId);
+  const operatorDeckData = buildOperatorDeckModel(state).map((operator) => [
+    operator.id,
+    operator.deployed,
+    operator.limit,
+    operator.disabled,
+    operator.disabledReason,
+    operator.selected
+  ]);
+  const skill = buildSkillPanelModel(selected);
+
+  return {
+    topStatus: JSON.stringify([
+      state.cost,
+      state.maxCost,
+      state.lives,
+      state.maxLives,
+      state.currentWave,
+      state.totalWaves,
+      formatBattleTime(state.elapsed),
+      state.map.name,
+      message
+    ]),
+    operatorDeck: JSON.stringify([
+      state.status,
+      state.cost,
+      state.selectedOperatorType,
+      state.operators.length,
+      operatorDeckData
+    ]),
+    infoPanel: selected ? JSON.stringify([
+      selected.id,
+      Math.ceil(selected.hp),
+      selected.maxHp,
+      selected.attack,
+      selected.defense,
+      selected.attackInterval,
+      selected.blockedCount,
+      selected.block,
+      skill?.name,
+      skill?.description,
+      skill?.sp,
+      skill?.spCost,
+      skill?.ready,
+      skill?.activeRemaining
+    ]) : 'empty',
+    controls: JSON.stringify([state.status, state.speed]),
+    result: JSON.stringify([
+      state.status,
+      state.stars,
+      state.kills,
+      state.leaks,
+      state.lives
+    ])
+  };
+}
+
 export class UIController {
   constructor({ root, canvas, renderer, maps, operatorCatalog, enemyCatalog }) {
     this.root = root;
@@ -67,6 +125,7 @@ export class UIController {
     this.enemyCatalog = enemyCatalog;
     this.mapIndex = 0;
     this.message = '';
+    this.renderKeys = {};
     this.createGame(this.maps[this.mapIndex]);
     this.cacheElements();
     this.bindEvents();
@@ -102,6 +161,7 @@ export class UIController {
   bindEvents() {
     this.mapSelect.addEventListener('change', () => {
       this.mapIndex = Number(this.mapSelect.value);
+      this.renderKeys = {};
       this.createGame(this.maps[this.mapIndex]);
       this.message = '';
       this.sync();
@@ -124,6 +184,7 @@ export class UIController {
 
     this.restartButton.addEventListener('click', () => {
       this.game.restart();
+      this.renderKeys = {};
       this.message = '';
       this.sync();
     });
@@ -133,21 +194,23 @@ export class UIController {
       this.sync();
     });
 
-    this.operatorDeck.addEventListener('click', (event) => {
+    this.operatorDeck.addEventListener('pointerdown', (event) => {
       const button = event.target.closest('[data-operator-id]');
       if (!button || button.disabled) {
         return;
       }
+      event.preventDefault();
       this.game.selectOperator(button.dataset.operatorId);
       this.message = `${button.dataset.operatorName} 待部署`;
       this.sync();
     });
 
-    this.infoPanel.addEventListener('click', (event) => {
+    this.infoPanel.addEventListener('pointerdown', (event) => {
       const button = event.target.closest('#skill-button');
       if (!button) {
         return;
       }
+      event.preventDefault();
       const state = this.game.getState();
       if (!state.selectedOperatorId) {
         return;
@@ -202,13 +265,22 @@ export class UIController {
 
   sync() {
     const state = this.game.getState();
+    const keys = buildRenderKeys(state, this.message);
     this.renderMapOptions();
-    this.renderTopStatus(state);
-    this.renderOperatorDeck(state);
-    this.renderInfoPanel(state);
-    this.renderControls(state);
-    this.renderResult(state);
+    this.renderIfChanged('topStatus', keys.topStatus, () => this.renderTopStatus(state));
+    this.renderIfChanged('operatorDeck', keys.operatorDeck, () => this.renderOperatorDeck(state));
+    this.renderIfChanged('infoPanel', keys.infoPanel, () => this.renderInfoPanel(state));
+    this.renderIfChanged('controls', keys.controls, () => this.renderControls(state));
+    this.renderIfChanged('result', keys.result, () => this.renderResult(state));
     this.renderer.render(state);
+  }
+
+  renderIfChanged(section, key, render) {
+    if (this.renderKeys[section] === key) {
+      return;
+    }
+    render();
+    this.renderKeys[section] = key;
   }
 
   renderMapOptions() {

@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateCanvasMetrics, rangeCellsFor, tileColorForType } from '../src/renderers/CanvasRenderer.js';
-import { buildOperatorDeckModel, buildSkillPanelModel, formatBattleTime } from '../src/ui/UIController.js';
+import {
+  buildOperatorDeckModel,
+  buildRenderKeys,
+  buildSkillPanelModel,
+  formatBattleTime
+} from '../src/ui/UIController.js';
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
 
 test('calculateCanvasMetrics fits map into available canvas area', () => {
@@ -58,4 +63,59 @@ test('buildSkillPanelModel exposes ready state for selected operator skill', () 
     ready: true,
     activeRemaining: 0
   });
+});
+
+test('buildRenderKeys keeps interactive regions stable across frame-only changes', () => {
+  const baseOperator = {
+    id: 'vanguard-1',
+    templateId: 'vanguard',
+    class: 'vanguard',
+    className: '先锋',
+    name: '巡线员',
+    hp: 180,
+    maxHp: 180,
+    attack: 18,
+    defense: 6,
+    attackInterval: 1.5,
+    blockedCount: 0,
+    block: 2,
+    skill: {
+      name: '战术补给',
+      description: '立刻回复6费用。',
+      sp: 4.1,
+      spCost: 10,
+      activeRemaining: 0
+    }
+  };
+  const baseState = {
+    map: { name: '新手训练场' },
+    cost: 20,
+    maxCost: 30,
+    lives: 10,
+    maxLives: 10,
+    currentWave: 1,
+    totalWaves: 3,
+    elapsed: 12.1,
+    status: 'running',
+    speed: 1,
+    operators: [baseOperator],
+    operatorCatalog: DEFAULT_OPERATORS,
+    selectedOperatorType: null,
+    selectedOperatorId: 'vanguard-1',
+    kills: 0,
+    leaks: 0,
+    stars: 0
+  };
+  const nextFrameState = {
+    ...baseState,
+    elapsed: 12.6,
+    operators: [{ ...baseOperator, skill: { ...baseOperator.skill, sp: 4.6 } }]
+  };
+
+  const before = buildRenderKeys(baseState, '');
+  const after = buildRenderKeys(nextFrameState, '');
+
+  assert.equal(after.operatorDeck, before.operatorDeck);
+  assert.equal(after.infoPanel, before.infoPanel);
+  assert.equal(after.controls, before.controls);
 });
