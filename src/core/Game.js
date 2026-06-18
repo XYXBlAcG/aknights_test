@@ -63,6 +63,8 @@ export class Game {
     this.warnedWaveEvents = new Set();
     this.seenEnemyTypes = new Set();
     this.enemyIntelQueue = [];
+    this.enemyIntelTimers = new Map();
+    this.enemyIntelDisplaySeconds = displaySeconds(this.map.enemyIntelDisplaySeconds, 6);
     this.enemies = [];
     this.status = 'ready';
     this.lives = this.map.maxLives;
@@ -200,6 +202,7 @@ export class Game {
     }
 
     const scaledDelta = deltaSeconds * this.speed;
+    this.tickEnemyIntel(scaledDelta);
     this.effectSystem.tick(scaledDelta);
     this.elapsed += scaledDelta;
 
@@ -321,10 +324,29 @@ export class Game {
     }
     this.seenEnemyTypes.add(templateId);
     this.enemyIntelQueue.push(structuredClone(template));
+    this.enemyIntelTimers.set(templateId, this.enemyIntelDisplaySeconds);
   }
 
   dismissEnemyIntel(templateId) {
     this.enemyIntelQueue = this.enemyIntelQueue.filter((enemy) => enemy.id !== templateId);
+    this.enemyIntelTimers.delete(templateId);
+  }
+
+  tickEnemyIntel(deltaSeconds) {
+    const activeIntel = this.enemyIntelQueue[0];
+    if (!activeIntel) {
+      return;
+    }
+
+    const remaining = this.enemyIntelTimers.get(activeIntel.id) ?? this.enemyIntelDisplaySeconds;
+    const nextRemaining = remaining - deltaSeconds;
+    if (nextRemaining > 0) {
+      this.enemyIntelTimers.set(activeIntel.id, nextRemaining);
+      return;
+    }
+
+    this.enemyIntelTimers.delete(activeIntel.id);
+    this.enemyIntelQueue.shift();
   }
 
   isEnded() {
@@ -403,4 +425,8 @@ export class Game {
       this.result = result;
     }
   }
+}
+
+function displaySeconds(value, fallback) {
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
 }

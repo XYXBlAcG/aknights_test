@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateCanvasMetrics, rangeCellsFor, tileColorForType } from '../src/renderers/CanvasRenderer.js';
+import {
+  buildEnemyHpBarModel,
+  calculateCanvasMetrics,
+  rangeCellsFor,
+  tileColorForType
+} from '../src/renderers/CanvasRenderer.js';
 import {
   buildOperatorDeckModel,
   buildRenderKeys,
@@ -29,6 +34,38 @@ test('calculateCanvasMetrics fits map into available canvas area', () => {
 test('tileColorForType returns distinct tactical colors', () => {
   assert.notEqual(tileColorForType('path'), tileColorForType('high'));
   assert.notEqual(tileColorForType('wall'), tileColorForType('path'));
+});
+
+test('buildEnemyHpBarModel exposes visible segments for phased enemies', () => {
+  assert.deepEqual(buildEnemyHpBarModel({ hp: 40, maxHp: 100 }), {
+    bars: [
+      { phaseIndex: 0, ratio: 0.4, active: true, state: 'active' }
+    ]
+  });
+
+  assert.deepEqual(buildEnemyHpBarModel({
+    hp: 50,
+    maxHp: 100,
+    phaseIndex: 0,
+    phases: [{ maxHp: 100 }, { maxHp: 200 }]
+  }), {
+    bars: [
+      { phaseIndex: 0, ratio: 0.5, active: true, state: 'active' },
+      { phaseIndex: 1, ratio: 1, active: false, state: 'pending' }
+    ]
+  });
+
+  assert.deepEqual(buildEnemyHpBarModel({
+    hp: 50,
+    maxHp: 200,
+    phaseIndex: 1,
+    phases: [{ maxHp: 100 }, { maxHp: 200 }]
+  }), {
+    bars: [
+      { phaseIndex: 0, ratio: 1, active: false, state: 'completed' },
+      { phaseIndex: 1, ratio: 0.25, active: true, state: 'active' }
+    ]
+  });
 });
 
 test('buildOperatorDeckModel marks unaffordable operators disabled', () => {

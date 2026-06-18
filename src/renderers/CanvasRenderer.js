@@ -38,6 +38,27 @@ export function tileColorForType(type) {
   return TILE_COLORS[type] ?? '#1a222b';
 }
 
+export function buildEnemyHpBarModel(enemy) {
+  const phaseCount = Array.isArray(enemy?.phases) && enemy.phases.length > 1 ? enemy.phases.length : 1;
+  const phaseIndex = clampInteger(enemy?.phaseIndex, 0, phaseCount - 1);
+  const bars = Array.from({ length: phaseCount }, (_, index) => {
+    if (index < phaseIndex) {
+      return { phaseIndex: index, ratio: 1, active: false, state: 'completed' };
+    }
+    if (index > phaseIndex) {
+      return { phaseIndex: index, ratio: 1, active: false, state: 'pending' };
+    }
+    return {
+      phaseIndex: index,
+      ratio: unitHpRatio(enemy),
+      active: true,
+      state: 'active'
+    };
+  });
+
+  return { bars };
+}
+
 export class CanvasRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -358,7 +379,7 @@ export class CanvasRenderer {
       ctx.lineWidth = enemy.blockedBy ? 2.5 : 1.5;
       ctx.stroke();
 
-      this.drawHpBar(ctx, enemy, x - radius, y + radius + 4, radius * 2, 4);
+      this.drawEnemyHpBars(ctx, enemy, x - radius, y + radius + 4, radius * 2, 4);
     });
   }
 
@@ -438,8 +459,19 @@ export class CanvasRenderer {
   }
 
   drawHpBar(ctx, unit, x, y, width, height) {
-    const hpRatio = unit.hp / unit.maxHp;
+    const hpRatio = unitHpRatio(unit);
     this.drawRatioBar(ctx, x, y, width, height, hpRatio, hpRatio > 0.45 ? '#72e0a6' : '#ec5757');
+  }
+
+  drawEnemyHpBars(ctx, enemy, x, y, width, height) {
+    const model = buildEnemyHpBarModel(enemy);
+    const barHeight = model.bars.length > 1 ? Math.max(2, Math.floor(height * 0.75)) : height;
+    const gap = model.bars.length > 1 ? 1 : 0;
+
+    model.bars.forEach((bar, index) => {
+      const barY = y + index * (barHeight + gap);
+      this.drawRatioBar(ctx, x, barY, width, barHeight, bar.ratio, enemyHpBarColor(bar));
+    });
   }
 
   drawRatioBar(ctx, x, y, width, height, ratio, color) {
@@ -478,6 +510,34 @@ function directionVector(direction) {
     return { x: -1, y: 0 };
   }
   return { x: 1, y: 0 };
+}
+
+function unitHpRatio(unit) {
+  const hp = Number(unit?.hp);
+  const maxHp = Number(unit?.maxHp);
+  if (!Number.isFinite(hp) || !Number.isFinite(maxHp) || maxHp <= 0) {
+    return 0;
+  }
+  return clampRatio(hp / maxHp);
+}
+
+function clampRatio(value) {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+}
+
+function clampInteger(value, min, max) {
+  const parsed = Number.isInteger(value) ? value : min;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function enemyHpBarColor(bar) {
+  if (bar.state === 'pending') {
+    return '#56606d';
+  }
+  if (bar.state === 'completed') {
+    return '#8fd4ff';
+  }
+  return bar.ratio > 0.45 ? '#72e0a6' : '#ec5757';
 }
 
 function effectProgress(effect) {

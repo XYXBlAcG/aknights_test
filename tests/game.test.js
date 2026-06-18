@@ -413,6 +413,34 @@ test('game queues enemy intel once per enemy type', () => {
   assert.equal(state.enemyIntelQueue[0].id, 'infantry');
 });
 
+test('game auto-dismisses enemy intel after the configured display time', () => {
+  const intelMap = {
+    ...map,
+    id: 'intel-auto-dismiss',
+    width: 5,
+    grid: [['path', 'path', 'path', 'path', 'path']],
+    paths: [{ id: 'main', points: [{ x: 0, y: 0 }, { x: 4, y: 0 }], lifeDamage: 1 }],
+    enemyIntelDisplaySeconds: 2,
+    timeline: [{ wave: 1, startTime: 0, enemyType: 'infantry', count: 1, interval: 0.1, pathId: 'main' }]
+  };
+  const game = new Game({ map: intelMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog: DEFAULT_ENEMIES });
+
+  game.start();
+  game.tick(0);
+  assert.equal(game.getState().enemyIntelQueue.length, 1);
+
+  game.tick(1.9);
+  assert.equal(game.getState().enemyIntelQueue.length, 1);
+
+  game.tick(0.2);
+  assert.equal(game.getState().enemyIntelQueue.length, 0);
+
+  game.restart();
+  game.start();
+  game.tick(0);
+  assert.deepEqual(game.getState().enemyIntelQueue.map((enemy) => enemy.id), ['infantry']);
+});
+
 test('game queues enemy intel in spawn order and keeps snapshots isolated', () => {
   const enemyCatalog = {
     infantry: { ...DEFAULT_ENEMIES.infantry },
