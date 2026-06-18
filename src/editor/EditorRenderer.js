@@ -8,7 +8,7 @@ export class EditorRenderer {
     this.metrics = null;
   }
 
-  render(state, hoverCell = null) {
+  render(state, hoverCell = null, previewCells = []) {
     const { width, height, ratio } = this.resizeCanvas();
     const ctx = this.ctx;
     ctx.save();
@@ -17,6 +17,7 @@ export class EditorRenderer {
     this.metrics = calculateCanvasMetrics(state.map, width, height);
     this.drawBackground(ctx, width, height);
     this.drawGrid(ctx, state, hoverCell);
+    this.drawPreviewCells(ctx, previewCells);
     this.drawPaths(ctx, state);
     ctx.restore();
   }
@@ -100,6 +101,22 @@ export class EditorRenderer {
         ctx.textBaseline = 'middle';
         ctx.fillText(String(index + 1), x, y);
       });
+    });
+  }
+
+  drawPreviewCells(ctx, previewCells) {
+    if (!previewCells || previewCells.length === 0) {
+      return;
+    }
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    ctx.fillStyle = 'rgba(246, 196, 69, 0.24)';
+    previewCells.forEach((cell) => {
+      ctx.fillRect(
+        offsetX + cell.x * tileSize + 2,
+        offsetY + cell.y * tileSize + 2,
+        tileSize - 4,
+        tileSize - 4
+      );
     });
   }
 

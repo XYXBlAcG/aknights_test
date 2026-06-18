@@ -1,0 +1,191 @@
+import { normalizeRange } from '../utils/RangeMath.js';
+
+const ID_PATTERN = /^[a-z0-9_-]+$/;
+const OPERATOR_CLASSES = new Set(['vanguard', 'guard', 'defender', 'sniper', 'caster', 'medic', 'custom']);
+const DEPLOY_TYPES = new Set(['ground', 'high']);
+const DAMAGE_TYPES = new Set(['physical', 'arts', 'heal']);
+const TARGETING_TYPES = new Set(['blocked-first', 'exit-first', 'flying-first', 'high-defense', 'lowest-hp-percent']);
+const SKILL_TYPES = new Set(['instant_cost', 'buff', 'next_attack', 'instant_heal']);
+
+export function normalizeOperatorTemplate(template) {
+  const id = normalizeId(template?.id, 'operator id');
+  const operatorClass = oneOf(template?.class ?? 'custom', OPERATOR_CLASSES, 'operator class');
+  const deployType = oneOf(template?.deployType, DEPLOY_TYPES, 'deploy type');
+  const damageType = oneOf(template?.damageType, DAMAGE_TYPES, 'damage type');
+  const targeting = oneOf(template?.targeting ?? defaultTargetingForDamage(damageType), TARGETING_TYPES, 'targeting');
+
+  return {
+    id,
+    name: nonEmptyString(template?.name, 'operator name'),
+    class: operatorClass,
+    className: nonEmptyString(template?.className ?? operatorClass, 'class name'),
+    deployType,
+    cost: numberInRange(template?.cost, 0, 99, 'cost'),
+    maxHp: numberInRange(template?.maxHp, 1, 99999, 'max hp'),
+    attack: numberInRange(template?.attack, 0, 99999, 'attack'),
+    defense: numberInRange(template?.defense ?? 0, 0, 99999, 'defense'),
+    resistance: numberInRange(template?.resistance ?? 0, 0, 0.95, 'resistance'),
+    attackInterval: numberInRange(template?.attackInterval, 0.1, 60, 'attack interval'),
+    block: integerInRange(template?.block ?? 0, 0, 10, 'block'),
+    damageType,
+    range: normalizeRange(template?.range),
+    targeting,
+    trait: String(template?.trait ?? 'custom'),
+    skill: normalizeSkill(template?.skill),
+    color: nonEmptyString(template?.color ?? '#5fc9ff', 'color')
+  };
+}
+
+export function normalizeEnemyTemplate(template) {
+  return {
+    id: normalizeId(template?.id, 'enemy id'),
+    name: nonEmptyString(template?.name, 'enemy name'),
+    maxHp: numberInRange(template?.maxHp, 1, 999999, 'max hp'),
+    attack: numberInRange(template?.attack ?? 0, 0, 99999, 'attack'),
+    defense: numberInRange(template?.defense ?? 0, 0, 99999, 'defense'),
+    resistance: numberInRange(template?.resistance ?? 0, 0, 0.95, 'resistance'),
+    speed: numberInRange(template?.speed, 0.01, 20, 'speed'),
+    attackInterval: numberInRange(template?.attackInterval ?? 1.5, 0.1, 60, 'attack interval'),
+    canBeBlocked: Boolean(template?.canBeBlocked),
+    isFlying: Boolean(template?.isFlying),
+    rewardCost: integerInRange(template?.rewardCost ?? 0, 0, 999, 'reward cost'),
+    elite: Boolean(template?.elite),
+    boss: Boolean(template?.boss),
+    color: nonEmptyString(template?.color ?? '#e15f5f', 'color')
+  };
+}
+
+export function validateOperatorTemplate(template) {
+  const earlyErrors = [];
+  try {
+    normalizeId(template?.id, 'operator id');
+  } catch (error) {
+    earlyErrors.push(error.message);
+  }
+  try {
+    normalizeRange(template?.range);
+  } catch (error) {
+    earlyErrors.push(error.message);
+  }
+  if (earlyErrors.length > 0) {
+    return {
+      ok: false,
+      value: null,
+      errors: earlyErrors
+    };
+  }
+  return validateWith(() => normalizeOperatorTemplate(template));
+}
+
+export function validateEnemyTemplate(template) {
+  return validateWith(() => normalizeEnemyTemplate(template));
+}
+
+export function validateCustomCatalogs(data) {
+  const errors = [];
+  Object.entries(data?.operators ?? {}).forEach(([id, template]) => {
+    const result = validateOperatorTemplate({ ...template, id: template?.id ?? id });
+    errors.push(...result.errors.map((error) => `operator ${id}: ${error}`));
+  });
+  Object.entries(data?.enemies ?? {}).forEach(([id, template]) => {
+    const result = validateEnemyTemplate({ ...template, id: template?.id ?? id });
+    errors.push(...result.errors.map((error) => `enemy ${id}: ${error}`));
+  });
+  return {
+    ok: errors.length === 0,
+    errors
+  };
+}
+
+function validateWith(normalizer) {
+  try {
+    return {
+      ok: true,
+      value: normalizer(),
+      errors: []
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      value: null,
+      errors: splitErrorMessages(error)
+    };
+  }
+}
+
+function normalizeId(value, label) {
+  const id = nonEmptyString(value, label);
+  if (!ID_PATTERN.test(id)) {
+    throw new Error(`${label} must contain only lowercase letters, numbers, dashes, and underscores`);
+  }
+  return id;
+}
+
+function nonEmptyString(value, label) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+function numberInRange(value, min, max, label) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) {
+    throw new Error(`${label} must be between ${min} and ${max}`);
+  }
+  return number;
+}
+
+function integerInRange(value, min, max, label) {
+  const number = numberInRange(value, min, max, label);
+  if (!Number.isInteger(number)) {
+    throw new Error(`${label} must be an integer`);
+  }
+  return number;
+}
+
+function oneOf(value, allowed, label) {
+  if (!allowed.has(value)) {
+    throw new Error(`${label} must be one of ${[...allowed].join(', ')}`);
+  }
+  return value;
+}
+
+function normalizeSkill(skill) {
+  if (!skill) {
+    return null;
+  }
+  const type = oneOf(skill.type, SKILL_TYPES, 'skill type');
+  const normalized = {
+    ...skill,
+    id: normalizeId(skill.id ?? type, 'skill id'),
+    name: nonEmptyString(skill.name ?? type, 'skill name'),
+    description: nonEmptyString(skill.description ?? '', 'skill description'),
+    spCost: numberInRange(skill.spCost ?? 1, 1, 999, 'skill sp cost'),
+    type
+  };
+  if ('duration' in normalized) {
+    normalized.duration = numberInRange(normalized.duration, 0, 999, 'skill duration');
+  }
+  if ('amount' in normalized) {
+    normalized.amount = numberInRange(normalized.amount, 0, 99999, 'skill amount');
+  }
+  if ('healPercent' in normalized) {
+    normalized.healPercent = numberInRange(normalized.healPercent, 0, 1, 'skill heal percent');
+  }
+  if (normalized.effect) {
+    normalized.effect = { ...normalized.effect };
+  }
+  return normalized;
+}
+
+function defaultTargetingForDamage(damageType) {
+  return damageType === 'heal' ? 'lowest-hp-percent' : 'exit-first';
+}
+
+function splitErrorMessages(error) {
+  return String(error?.message ?? error)
+    .split('\n')
+    .map((message) => message.trim())
+    .filter(Boolean);
+}

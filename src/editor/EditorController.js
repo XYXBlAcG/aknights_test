@@ -1,20 +1,22 @@
 import {
   addPath,
-  addPointToSelectedPath,
   addTimelineEvent,
+  cellsInRect,
   createEditorState,
   getValidation,
   loadMapIntoEditor,
+  paintCells,
   removeLastPointFromSelectedPath,
   removePath,
   removeTimelineEvent,
+  resizeMap,
   selectPath,
-  setCellType,
   toMapJson,
   updateMapMeta,
   updatePath,
   updateTimelineEvent
 } from './EditorModel.js';
+import { DEFAULT_ENEMIES } from '../data/defaultEnemies.js';
 
 const TERRAIN_LABELS = {
   path: '路径',
@@ -23,12 +25,18 @@ const TERRAIN_LABELS = {
 };
 
 export class EditorController {
-  constructor({ root, canvas, renderer }) {
+  constructor({ root, canvas, renderer, enemyCatalog = DEFAULT_ENEMIES }) {
     this.root = root;
     this.canvas = canvas;
     this.renderer = renderer;
+    this.enemyCatalog = enemyCatalog;
     this.state = createEditorState({ width: 10, height: 6, name: '新地图' });
     this.hoverCell = null;
+    this.previewCells = [];
+    this.isPainting = false;
+    this.paintMode = 'paint';
+    this.dragStartCell = null;
+    this.paintedCellKeys = new Set();
     this.selectedTerrain = 'path';
     this.cacheElements();
     this.bindEvents();
@@ -39,6 +47,8 @@ export class EditorController {
     this.terrainTools = this.root.querySelector('#terrain-tools');
     this.mapNameInput = this.root.querySelector('#map-name-input');
     this.mapIdInput = this.root.querySelector('#map-id-input');
+    this.mapWidthInput = this.root.querySelector('#map-width-input');
+    this.mapHeightInput = this.root.querySelector('#map-height-input');
     this.initialCostInput = this.root.querySelector('#initial-cost-input');
     this.maxCostInput = this.root.querySelector('#max-cost-input');
     this.maxLivesInput = this.root.querySelector('#max-lives-input');
@@ -79,6 +89,18 @@ export class EditorController {
         this.state = updateMapMeta(this.state, { [key]: value });
         this.sync();
       });
+    });
+
+    [this.mapWidthInput, this.mapHeightInput].forEach((input) => {
+      const handleResize = () => {
+        this.runMutation(() => resizeMap(
+          this.state,
+          Number(this.mapWidthInput.value),
+          Number(this.mapHeightInput.value)
+        ), '地图尺寸已更新');
+      };
+      input.addEventListener('input', handleResize);
+      input.addEventListener('change', handleResize);
     });
 
     this.addPathButton.addEventListener('click', () => {
@@ -165,26 +187,72 @@ export class EditorController {
       }, '已生成下载');
     });
 
+    this.canvas.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      const cell = this.renderer.cellFromEvent(event, this.state.map);
+      this.isPainting = true;
+      this.paintMode = event.shiftKey ? 'box' : 'paint';
+      this.dragStartCell = cell;
+      this.hoverCell = cell;
+      this.paintedCellKeys = new Set();
+      this.canvas.setPointerCapture?.(event.pointerId);
+      if (this.paintMode === 'box') {
+        this.previewCells = cellsInRect(cell, cell);
+        this.renderer.render(this.state, this.hoverCell, this.previewCells);
+        return;
+      }
+      this.paintCellOnce(cell);
+    });
+
     this.canvas.addEventListener('pointermove', (event) => {
-      this.hoverCell = this.renderer.cellFromEvent(event, this.state.map);
-      this.renderer.render(this.state, this.hoverCell);
+      const cell = this.renderer.cellFromEvent(event, this.state.map);
+      this.hoverCell = cell;
+      if (!this.isPainting) {
+        this.renderer.render(this.state, this.hoverCell, this.previewCells);
+        return;
+      }
+      if (this.paintMode === 'box') {
+        this.previewCells = cellsInRect(this.dragStartCell, cell);
+        this.renderer.render(this.state, this.hoverCell, this.previewCells);
+        return;
+      }
+      this.paintCellOnce(cell);
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (!this.isPainting) {
+        return;
+      }
+      if (this.paintMode === 'box') {
+        const cells = this.previewCells;
+        this.previewCells = [];
+        this.isPainting = false;
+        this.runMutation(() => paintCells(this.state, cells, this.selectedTerrain, { appendPathPoints: true }), `${TERRAIN_LABELS[this.selectedTerrain]} ${cells.length} 格`);
+        return;
+      }
+      this.isPainting = false;
+      this.previewCells = [];
+      this.renderer.render(this.state, this.hoverCell, this.previewCells);
     });
 
     this.canvas.addEventListener('mouseleave', () => {
       this.hoverCell = null;
-      this.renderer.render(this.state, this.hoverCell);
+      if (!this.isPainting) {
+        this.renderer.render(this.state, this.hoverCell, this.previewCells);
+      }
     });
+  }
 
-    this.canvas.addEventListener('click', (event) => {
-      const cell = this.renderer.cellFromEvent(event, this.state.map);
-      this.runMutation(() => {
-        let next = setCellType(this.state, cell, this.selectedTerrain);
-        if (this.selectedTerrain === 'path' && next.selectedPathId) {
-          next = addPointToSelectedPath(next, cell);
-        }
-        return next;
-      }, `${TERRAIN_LABELS[this.selectedTerrain]} ${cell.x},${cell.y}`);
-    });
+  paintCellOnce(cell) {
+    const key = `${cell.x},${cell.y}`;
+    if (this.paintedCellKeys.has(key)) {
+      return;
+    }
+    this.paintedCellKeys.add(key);
+    this.runMutation(() => paintCells(this.state, [cell], this.selectedTerrain, { appendPathPoints: true }), `${TERRAIN_LABELS[this.selectedTerrain]} ${cell.x},${cell.y}`);
   }
 
   runMutation(mutator, successMessage) {
@@ -202,12 +270,14 @@ export class EditorController {
     this.renderPathList();
     this.renderTimelineList();
     this.renderValidation(message);
-    this.renderer.render(this.state, this.hoverCell);
+    this.renderer.render(this.state, this.hoverCell, this.previewCells);
   }
 
   syncMetaInputs() {
     this.mapNameInput.value = this.state.map.name;
     this.mapIdInput.value = this.state.map.id;
+    this.mapWidthInput.value = this.state.map.width;
+    this.mapHeightInput.value = this.state.map.height;
     this.initialCostInput.value = this.state.map.initialCost;
     this.maxCostInput.value = this.state.map.maxCost;
     this.maxLivesInput.value = this.state.map.maxLives;
@@ -244,15 +314,18 @@ export class EditorController {
     }
 
     const pathOptions = this.state.map.paths.map((path) => `<option value="${path.id}">${path.name}</option>`).join('');
-    this.timelineList.innerHTML = this.state.timelineEvents.map((event) => `
+    this.timelineList.innerHTML = this.state.timelineEvents.map((event) => {
+      const enemyOptions = buildEnemyOptionsModel({
+        enemyCatalog: this.enemyCatalog,
+        selectedEnemyType: event.enemyType
+      }).map((option) => enemyOption(option.id, event.enemyType, option.label, option.missing)).join('');
+      return `
       <article class="timeline-row">
         <label>波次 <input data-event-id="${event.id}" data-event-field="wave" type="number" value="${event.wave}" /></label>
         <label>时间 <input data-event-id="${event.id}" data-event-field="startTime" type="number" value="${event.startTime}" /></label>
         <label>敌人
           <select data-event-id="${event.id}" data-event-field="enemyType">
-            ${enemyOption('infantry', event.enemyType, '突进兵')}
-            ${enemyOption('heavy', event.enemyType, '装甲兵')}
-            ${enemyOption('drone', event.enemyType, '飞行兵')}
+            ${enemyOptions}
           </select>
         </label>
         <label>数量 <input data-event-id="${event.id}" data-event-field="count" type="number" value="${event.count}" /></label>
@@ -264,7 +337,8 @@ export class EditorController {
         </label>
         <button data-remove-event="${event.id}">删除</button>
       </article>
-    `).join('');
+    `;
+    }).join('');
 
     this.state.timelineEvents.forEach((event) => {
       const select = this.timelineList.querySelector(`[data-event-id="${event.id}"][data-event-field="pathId"]`);
@@ -282,8 +356,30 @@ export class EditorController {
   }
 }
 
-function enemyOption(value, selected, label) {
-  return `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`;
+export function buildEnemyOptionsModel({ enemyCatalog, selectedEnemyType = null }) {
+  const options = Object.values(enemyCatalog)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((enemy) => ({
+      id: enemy.id,
+      label: enemy.name,
+      selected: enemy.id === selectedEnemyType,
+      missing: false
+    }));
+
+  if (selectedEnemyType && !options.some((option) => option.id === selectedEnemyType)) {
+    options.push({
+      id: selectedEnemyType,
+      label: `${selectedEnemyType}（缺失）`,
+      selected: true,
+      missing: true
+    });
+  }
+
+  return options;
+}
+
+function enemyOption(value, selected, label, missing = false) {
+  return `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(label)}${missing ? '' : ''}</option>`;
 }
 
 function escapeHtml(value) {

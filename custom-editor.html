@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Custom Editor - Aknights Test</title>
+  </head>
+  <body class="editor-page custom-editor-page">
+    <div id="custom-editor-app">
+      <header class="editor-topbar">
+        <div class="brand">CUSTOM DATA / FIELD TEST</div>
+        <nav class="editor-nav">
+          <a href="/">返回战斗</a>
+          <a href="/editor.html">地图编辑器</a>
+          <button id="custom-save-button">保存</button>
+          <button id="custom-export-button">导出</button>
+          <button id="custom-import-button">导入</button>
+        </nav>
+      </header>
+
+      <main class="custom-editor-shell">
+        <aside class="editor-panel custom-list-panel">
+          <h2>模板</h2>
+          <div id="custom-kind-tabs" class="segmented-tabs">
+            <button data-kind="operators">干员</button>
+            <button data-kind="enemies">敌人</button>
+          </div>
+          <div id="custom-template-list" class="custom-template-list"></div>
+          <div class="row-actions">
+            <button id="custom-create-button">新建</button>
+            <button id="custom-duplicate-button">复制</button>
+            <button id="custom-delete-button">删除</button>
+          </div>
+        </aside>
+
+        <section class="editor-panel custom-form-panel">
+          <h2>属性</h2>
+          <form id="custom-template-form"></form>
+        </section>
+
+        <aside class="editor-panel custom-side-panel">
+          <section id="custom-range-panel"></section>
+          <section class="editor-json-panel">
+            <h2>JSON</h2>
+            <textarea id="custom-json-textarea" spellcheck="false"></textarea>
+            <div id="custom-validation-panel" class="validation-panel"></div>
+            <div id="custom-message" class="editor-message static"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/custom-editor.js"></script>
+  </body>
+</html>

@@ -1,5 +1,8 @@
 import { DEFAULT_OPERATORS } from '../data/defaultOperators.js';
-import { gridToCenter, isCellInDiamondRange, pixelToGrid } from '../utils/GridMath.js';
+import { gridToCenter, pixelToGrid } from '../utils/GridMath.js';
+import { rangeCellsFor as getRangeCellsFor } from '../utils/RangeMath.js';
+
+export { rangeCellsFor } from '../utils/RangeMath.js';
 
 const TILE_COLORS = {
   path: '#27313d',
@@ -31,27 +34,6 @@ export function calculateCanvasMetrics(map, canvasWidth, canvasHeight) {
 
 export function tileColorForType(type) {
   return TILE_COLORS[type] ?? '#1a222b';
-}
-
-export function rangeCellsFor(origin, range) {
-  if (!origin || !range) {
-    return [];
-  }
-
-  if (range.type === 'melee') {
-    return [{ x: origin.x, y: origin.y }];
-  }
-
-  const radius = Math.ceil(range.radius);
-  const cells = [];
-  for (let y = origin.y - radius; y <= origin.y + radius; y += 1) {
-    for (let x = origin.x - radius; x <= origin.x + radius; x += 1) {
-      if (isCellInDiamondRange(origin, { x, y }, range.radius)) {
-        cells.push({ x, y });
-      }
-    }
-  }
-  return cells;
 }
 
 export class CanvasRenderer {
@@ -241,7 +223,7 @@ export class CanvasRenderer {
     }
 
     const { tileSize, offsetX, offsetY } = this.metrics;
-    rangeCellsFor(origin, range).forEach((cell) => {
+    getRangeCellsFor(origin, range).forEach((cell) => {
       ctx.fillStyle = fillStyle;
       ctx.fillRect(offsetX + cell.x * tileSize + 3, offsetY + cell.y * tileSize + 3, tileSize - 6, tileSize - 6);
     });

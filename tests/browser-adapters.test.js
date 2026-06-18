@@ -8,6 +8,8 @@ import {
   formatBattleTime
 } from '../src/ui/UIController.js';
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
+import { DEFAULT_ENEMIES } from '../src/data/defaultEnemies.js';
+import { buildEnemyOptionsModel } from '../src/editor/EditorController.js';
 
 test('calculateCanvasMetrics fits map into available canvas area', () => {
   const metrics = calculateCanvasMetrics({ width: 10, height: 5 }, 1000, 600);
@@ -36,12 +38,66 @@ test('buildOperatorDeckModel marks unaffordable operators disabled', () => {
   assert.equal(model.find((operator) => operator.id === 'vanguard').disabledReason, '费用不足');
 });
 
+test('buildOperatorDeckModel includes custom operators after default order', () => {
+  const model = buildOperatorDeckModel({
+    operatorCatalog: {
+      ...DEFAULT_OPERATORS,
+      'custom-guard': {
+        ...DEFAULT_OPERATORS.guard,
+        id: 'custom-guard',
+        name: '自定义近卫',
+        class: 'custom',
+        className: '自定'
+      }
+    },
+    operators: [],
+    cost: 99,
+    selectedOperatorType: 'custom-guard'
+  });
+
+  assert.deepEqual(model.slice(0, 6).map((operator) => operator.id), [
+    'vanguard',
+    'guard',
+    'defender',
+    'sniper',
+    'caster',
+    'medic'
+  ]);
+  assert.equal(model.at(-1).id, 'custom-guard');
+  assert.equal(model.at(-1).limit, 8);
+  assert.equal(model.at(-1).selected, true);
+});
+
+test('buildEnemyOptionsModel includes custom enemies and missing selected ids', () => {
+  const options = buildEnemyOptionsModel({
+    enemyCatalog: {
+      ...DEFAULT_ENEMIES,
+      'custom-heavy': {
+        ...DEFAULT_ENEMIES.heavy,
+        id: 'custom-heavy',
+        name: '自定义重甲'
+      }
+    },
+    selectedEnemyType: 'missing-enemy'
+  });
+
+  assert.equal(options.some((option) => option.id === 'custom-heavy' && option.label === '自定义重甲'), true);
+  assert.equal(options.some((option) => option.id === 'missing-enemy' && option.missing), true);
+});
+
 test('formatBattleTime renders minute and second clock', () => {
   assert.equal(formatBattleTime(125.2), '02:05');
 });
 
 test('rangeCellsFor returns own cell for melee operators', () => {
   assert.deepEqual(rangeCellsFor({ x: 2, y: 3 }, { type: 'melee', radius: 0 }), [{ x: 2, y: 3 }]);
+});
+
+test('rangeCellsFor returns translated pattern cells for custom ranges', () => {
+  assert.deepEqual(rangeCellsFor({ x: 2, y: 3 }, {
+    type: 'pattern',
+    cells: [{ x: 0, y: 0 }, { x: -1, y: 2 }]
+  }), [{ x: 2, y: 3 }, { x: 1, y: 5 }]);
 });
 
 test('buildSkillPanelModel exposes ready state for selected operator skill', () => {

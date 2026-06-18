@@ -15,8 +15,8 @@ export function buildOperatorDeckModel({ operatorCatalog, operators, cost, selec
     return counts;
   }, {});
 
-  return DEFAULT_OPERATOR_ORDER.map((id) => {
-    const template = operatorCatalog[id];
+  return orderedOperatorTemplates(operatorCatalog).map((template) => {
+    const id = template.id;
     const classLimit = CLASS_LIMITS[template.class] ?? TOTAL_DEPLOY_LIMIT;
     const classCount = deployedByClass[template.class] ?? 0;
     const totalFull = operators.length >= TOTAL_DEPLOY_LIMIT;
@@ -40,6 +40,17 @@ export function buildOperatorDeckModel({ operatorCatalog, operators, cost, selec
       selected: selectedOperatorType === id
     };
   });
+}
+
+export function orderedOperatorTemplates(operatorCatalog) {
+  const defaultIds = new Set(DEFAULT_OPERATOR_ORDER);
+  const defaults = DEFAULT_OPERATOR_ORDER
+    .map((id) => operatorCatalog[id])
+    .filter(Boolean);
+  const custom = Object.values(operatorCatalog)
+    .filter((template) => !defaultIds.has(template.id))
+    .sort((a, b) => a.class.localeCompare(b.class) || a.name.localeCompare(b.name));
+  return [...defaults, ...custom];
 }
 
 export function buildSkillPanelModel(operator) {

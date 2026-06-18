@@ -1,4 +1,4 @@
-import { isCellInDiamondRange } from '../utils/GridMath.js';
+import { isCellInRange } from '../utils/RangeMath.js';
 import {
   consumeNextAttackSkill,
   getEffectiveAttack,
@@ -107,7 +107,7 @@ function selectAttackTarget(operator, enemies) {
   }
 
   const inRange = liveEnemies.filter((enemy) => {
-    return isCellInDiamondRange(operator.cell, enemy.cell, operator.range.radius);
+    return isCellInRange(operator.cell, enemy.cell, operator.range);
   });
 
   if (inRange.length === 0) {
@@ -130,7 +130,7 @@ function selectHealTarget(operator, operators) {
     return candidate.deployType === 'ground'
       && !candidate.isDead
       && candidate.hp < candidate.maxHp
-      && isCellInDiamondRange(operator.cell, candidate.cell, operator.range.radius);
+      && isCellInRange(operator.cell, candidate.cell, operator.range);
   });
 
   if (candidates.length === 0) {

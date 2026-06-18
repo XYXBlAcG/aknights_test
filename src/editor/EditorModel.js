@@ -1,5 +1,5 @@
 import { normalizeMap, validateMap } from '../data/MapLoader.js';
-import { isCellInBounds } from '../utils/GridMath.js';
+import { isCellInBounds, isSameCell } from '../utils/GridMath.js';
 
 const VALID_CELL_TYPES = new Set(['path', 'high', 'wall']);
 let pathSequence = 0;
@@ -37,15 +37,77 @@ export function createEditorState({
 }
 
 export function setCellType(state, cell, type) {
+  return paintCells(state, [cell], type);
+}
+
+export function paintCells(state, cells, type, options = {}) {
   if (!VALID_CELL_TYPES.has(type)) {
     throw new Error(`Invalid cell type ${type}`);
   }
-  if (!isCellInBounds(cell, state.map.width, state.map.height)) {
-    throw new Error(`Cell ${cell.x},${cell.y} is outside grid`);
+  const targetCells = uniqueInBoundsCells(cells, state.map.width, state.map.height);
+  const next = cloneState(state);
+
+  targetCells.forEach((cell) => {
+    const previousType = next.map.grid[cell.y][cell.x];
+    next.map.grid[cell.y][cell.x] = type;
+  });
+
+  if (type !== 'path') {
+    removePathPointsAtCells(next, targetCells);
   }
 
+  if (type === 'path' && options.appendPathPoints && next.selectedPathId) {
+    const path = findPath(next, next.selectedPathId);
+    targetCells
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .forEach((cell) => {
+        if (!path.points.some((point) => isSameCell(point, cell))) {
+          path.points.push({ x: cell.x, y: cell.y });
+        }
+      });
+    normalizePathEndpoints(next, path.id);
+  }
+
+  normalizeAllPathEndpoints(next);
+  return next;
+}
+
+export function cellsInRect(start, end) {
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+  const cells = [];
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      cells.push({ x, y });
+    }
+  }
+  return cells;
+}
+
+export function resizeMap(state, width, height, fillType = 'wall') {
+  if (!VALID_CELL_TYPES.has(fillType)) {
+    throw new Error(`Invalid cell type ${fillType}`);
+  }
+
+  const nextWidth = clampInteger(width, 3, 30);
+  const nextHeight = clampInteger(height, 3, 20);
   const next = cloneState(state);
-  next.map.grid[cell.y][cell.x] = type;
+  const grid = Array.from({ length: nextHeight }, (_, y) => {
+    return Array.from({ length: nextWidth }, (_, x) => next.map.grid[y]?.[x] ?? fillType);
+  });
+
+  next.map = {
+    ...next.map,
+    width: nextWidth,
+    height: nextHeight,
+    grid
+  };
+  next.map.paths.forEach((path) => {
+    path.points = path.points.filter((point) => isCellInBounds(point, nextWidth, nextHeight));
+  });
+  normalizeAllPathEndpoints(next);
   return next;
 }
 
@@ -238,6 +300,50 @@ function normalizePathEndpoints(state, pathId) {
   path.entry = path.points[0] ?? null;
   path.exit = path.points[path.points.length - 1] ?? null;
   return state;
+}
+
+function normalizeAllPathEndpoints(state) {
+  state.map.paths.forEach((path) => {
+    path.entry = path.points[0] ?? null;
+    path.exit = path.points[path.points.length - 1] ?? null;
+  });
+  return state;
+}
+
+function removePathPointsAtCells(state, cells) {
+  if (cells.length === 0) {
+    return state;
+  }
+  const keys = new Set(cells.map((cell) => `${cell.x},${cell.y}`));
+  state.map.paths.forEach((path) => {
+    path.points = path.points.filter((point) => !keys.has(`${point.x},${point.y}`));
+  });
+  return state;
+}
+
+function uniqueInBoundsCells(cells, width, height) {
+  const seen = new Set();
+  const result = [];
+  cells.forEach((cell) => {
+    if (!isCellInBounds(cell, width, height)) {
+      return;
+    }
+    const key = `${cell.x},${cell.y}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    result.push({ x: cell.x, y: cell.y });
+  });
+  return result;
+}
+
+function clampInteger(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new Error(`Map size must be a finite number`);
+  }
+  return Math.max(min, Math.min(max, Math.round(number)));
 }
 
 function normalizeExportPath(path) {

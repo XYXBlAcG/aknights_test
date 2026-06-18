@@ -4,11 +4,14 @@ import {
   addPath,
   addPointToSelectedPath,
   addTimelineEvent,
+  cellsInRect,
   createEditorState,
   getValidation,
   loadMapIntoEditor,
+  paintCells,
   removeLastPointFromSelectedPath,
   removeTimelineEvent,
+  resizeMap,
   selectPath,
   setCellType,
   toMapJson,
@@ -33,6 +36,32 @@ test('setCellType paints a cell without mutating the original state', () => {
   assert.equal(next.map.grid[0][1], 'path');
 });
 
+test('paintCells paints multiple cells without mutating the original state', () => {
+  const state = createEditorState({ width: 4, height: 3 });
+  const next = paintCells(state, [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 0 },
+    { x: 9, y: 9 }
+  ], 'high');
+
+  assert.equal(state.map.grid[0][0], 'wall');
+  assert.equal(state.map.grid[0][1], 'wall');
+  assert.equal(next.map.grid[0][0], 'high');
+  assert.equal(next.map.grid[0][1], 'high');
+});
+
+test('cellsInRect returns row-major cells between two corners', () => {
+  assert.deepEqual(cellsInRect({ x: 2, y: 1 }, { x: 0, y: 2 }), [
+    { x: 0, y: 1 },
+    { x: 1, y: 1 },
+    { x: 2, y: 1 },
+    { x: 0, y: 2 },
+    { x: 1, y: 2 },
+    { x: 2, y: 2 }
+  ]);
+});
+
 test('path editing adds points only on path terrain and updates entry exit', () => {
   let state = createEditorState({ width: 3, height: 1 });
   state = setCellType(state, { x: 0, y: 0 }, 'path');
@@ -51,6 +80,42 @@ test('path editing adds points only on path terrain and updates entry exit', () 
 
   const shortened = removeLastPointFromSelectedPath(state);
   assert.deepEqual(shortened.map.paths[0].points, [{ x: 0, y: 0 }]);
+});
+
+test('painting over path terrain removes path points on overwritten cells', () => {
+  let state = createEditorState({ width: 3, height: 1 });
+  state = paintCells(state, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }], 'path');
+  state = addPath(state, '主线');
+  state = addPointToSelectedPath(state, { x: 0, y: 0 });
+  state = addPointToSelectedPath(state, { x: 1, y: 0 });
+  state = addPointToSelectedPath(state, { x: 2, y: 0 });
+
+  const next = paintCells(state, [{ x: 1, y: 0 }], 'wall');
+
+  assert.deepEqual(next.map.paths[0].points, [{ x: 0, y: 0 }, { x: 2, y: 0 }]);
+  assert.deepEqual(next.map.paths[0].entry, { x: 0, y: 0 });
+  assert.deepEqual(next.map.paths[0].exit, { x: 2, y: 0 });
+});
+
+test('resizeMap expands with walls and crops out-of-bounds path points', () => {
+  let state = createEditorState({ width: 4, height: 2 });
+  state = paintCells(state, [{ x: 0, y: 0 }, { x: 3, y: 0 }], 'path');
+  state = addPath(state, '主线');
+  state = addPointToSelectedPath(state, { x: 0, y: 0 });
+  state = addPointToSelectedPath(state, { x: 3, y: 0 });
+
+  const expanded = resizeMap(state, 5, 3);
+  assert.equal(expanded.map.width, 5);
+  assert.equal(expanded.map.height, 3);
+  assert.equal(expanded.map.grid[0][0], 'path');
+  assert.equal(expanded.map.grid[2][4], 'wall');
+
+  const cropped = resizeMap(expanded, 3, 3);
+  assert.equal(cropped.map.width, 3);
+  assert.equal(cropped.map.height, 3);
+  assert.deepEqual(cropped.map.paths[0].points, [{ x: 0, y: 0 }]);
+  assert.deepEqual(cropped.map.paths[0].entry, { x: 0, y: 0 });
+  assert.deepEqual(cropped.map.paths[0].exit, { x: 0, y: 0 });
 });
 
 test('timeline events can be added, updated, and removed', () => {

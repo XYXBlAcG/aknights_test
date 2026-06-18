@@ -57,6 +57,33 @@ test('combat system lets ranged operators damage enemies in range', () => {
   assert.equal(enemy.hp, 92);
 });
 
+test('combat system lets pattern range operators hit painted cells only', () => {
+  const operatorCatalog = {
+    patternSniper: {
+      ...DEFAULT_OPERATORS.sniper,
+      id: 'patternSniper',
+      range: { type: 'pattern', cells: [{ x: 0, y: 0 }, { x: 2, y: 0 }] }
+    }
+  };
+  const map = { width: 4, height: 1, grid: [['path', 'high', 'path', 'path']], initialCost: 30, maxCost: 30 };
+  const deployment = createDeploymentSystem({
+    map,
+    costSystem: createCostSystem({ initialCost: 30, maxCost: 30 }),
+    operatorCatalog
+  });
+  const sniper = deployment.deploy('patternSniper', { x: 1, y: 0 }).operator;
+  const inPattern = new Enemy(DEFAULT_ENEMIES.drone, { pathId: 'main' });
+  const outsidePattern = new Enemy(DEFAULT_ENEMIES.drone, { pathId: 'main' });
+  inPattern.cell = { x: 3, y: 0 };
+  outsidePattern.cell = { x: 2, y: 0 };
+  const combat = createCombatSystem();
+
+  combat.tick(0.8, { operators: [sniper], enemies: [outsidePattern, inPattern] });
+
+  assert.equal(inPattern.hp, 92);
+  assert.equal(outsidePattern.hp, 120);
+});
+
 test('combat system applies active attack multiplier skill effects', () => {
   const map = { width: 1, height: 1, grid: [['path']], initialCost: 30, maxCost: 30 };
   const deployment = createDeploymentSystem({
