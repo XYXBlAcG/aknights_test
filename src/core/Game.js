@@ -7,6 +7,7 @@ import { createBlockingSystem } from '../systems/BlockingSystem.js';
 import { createCombatSystem } from '../systems/CombatSystem.js';
 import { createCostSystem } from '../systems/CostSystem.js';
 import { createDeploymentSystem } from '../systems/DeploymentSystem.js';
+import { createEffectSystem } from '../systems/EffectSystem.js';
 import { createWaveSystem } from '../systems/WaveSystem.js';
 import { evaluateBattleResult } from '../systems/WinLoseSystem.js';
 import { activateOperatorSkill, tickOperatorSkills } from '../systems/SkillSystem.js';
@@ -52,6 +53,7 @@ export class Game {
     });
     this.blockingSystem = createBlockingSystem();
     this.combatSystem = createCombatSystem();
+    this.effectSystem = createEffectSystem();
     this.enemies = [];
     this.status = 'ready';
     this.lives = this.map.maxLives;
@@ -181,6 +183,7 @@ export class Game {
     }
 
     const scaledDelta = deltaSeconds * this.speed;
+    this.effectSystem.tick(scaledDelta);
     this.elapsed += scaledDelta;
 
     const waveResult = this.waveSystem.tick(scaledDelta);
@@ -233,6 +236,7 @@ export class Game {
       totalWaves: this.map.totalWaves,
       operators: this.deploymentSystem.operators,
       enemies: this.enemies,
+      effects: this.effectSystem.list(),
       operatorCatalog: this.operatorCatalog,
       selectedOperatorType: this.selectedOperatorType,
       selectedOperatorId: this.selectedOperatorId,

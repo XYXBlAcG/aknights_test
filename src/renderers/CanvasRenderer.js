@@ -55,6 +55,7 @@ export class CanvasRenderer {
     this.drawBackground(ctx, width, height);
     this.drawGrid(ctx, state);
     this.drawPaths(ctx, state);
+    this.drawEffects(ctx, state);
     this.drawDeploymentPreview(ctx, state);
     this.drawSelectedRange(ctx, state);
     this.drawDeploymentDirectionPrompt(ctx, state);
@@ -137,6 +138,14 @@ export class CanvasRenderer {
       ctx.globalAlpha = 0.42;
       ctx.stroke();
       ctx.globalAlpha = 1;
+    });
+  }
+
+  drawEffects(ctx, state) {
+    (state.effects ?? []).forEach((effect) => {
+      if (!effect?.type) {
+        return;
+      }
     });
   }
 
