@@ -58,6 +58,7 @@ export class CombatSystem {
 
     enemies.filter((enemy) => !enemy.isDead && enemy.attack > 0).forEach((enemy) => {
       enemy.attackTimer += deltaSeconds;
+      getEnemyBlocker(enemy, operators);
       if (enemy.attackTimer < enemy.attackInterval) {
         return;
       }
@@ -154,12 +155,9 @@ function selectHealTarget(operator, operators) {
 }
 
 function selectEnemyTarget(enemy, operators) {
-  if (enemy.blockedBy) {
-    const blocker = operators.find((operator) => operator.id === enemy.blockedBy && !operator.isDead);
-    if (blocker && isEnemyBlockedByOperator(enemy, blocker)) {
-      return blocker;
-    }
-    enemy.blockedBy = null;
+  const blocker = getEnemyBlocker(enemy, operators);
+  if (blocker) {
+    return blocker;
   }
 
   if (!enemy.range || enemy.range.type === 'melee') {
@@ -181,6 +179,20 @@ function selectEnemyTarget(enemy, operators) {
   return [...inRange].sort((a, b) => {
     return manhattanDistance(enemy.cell, a.cell) - manhattanDistance(enemy.cell, b.cell);
   })[0];
+}
+
+function getEnemyBlocker(enemy, operators) {
+  if (!enemy.blockedBy) {
+    return null;
+  }
+
+  const blocker = operators.find((operator) => operator.id === enemy.blockedBy && !operator.isDead);
+  if (blocker && isEnemyBlockedByOperator(enemy, blocker)) {
+    return blocker;
+  }
+
+  enemy.blockedBy = null;
+  return null;
 }
 
 function isEnemyBlockedByOperator(enemy, operator) {
