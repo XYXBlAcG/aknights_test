@@ -412,3 +412,40 @@ test('game queues enemy intel once per enemy type', () => {
   assert.equal(state.enemyIntelQueue.length, 1);
   assert.equal(state.enemyIntelQueue[0].id, 'infantry');
 });
+
+test('game queues enemy intel in spawn order and keeps snapshots isolated', () => {
+  const enemyCatalog = {
+    infantry: { ...DEFAULT_ENEMIES.infantry },
+    heavy: { ...DEFAULT_ENEMIES.heavy }
+  };
+  const intelMap = {
+    ...map,
+    timeline: [
+      { wave: 1, startTime: 0, enemyType: 'infantry', count: 1, interval: 0.1, pathId: 'main' },
+      { wave: 1, startTime: 0.1, enemyType: 'heavy', count: 1, interval: 0.1, pathId: 'main' }
+    ]
+  };
+  const game = new Game({ map: intelMap, operatorCatalog: DEFAULT_OPERATORS, enemyCatalog });
+
+  game.start();
+  game.tick(0.2);
+
+  assert.deepEqual(game.getState().enemyIntelQueue.map((enemy) => enemy.id), ['infantry', 'heavy']);
+
+  game.dismissEnemyIntel('infantry');
+  const afterDismiss = game.getState();
+  assert.deepEqual(afterDismiss.enemyIntelQueue.map((enemy) => enemy.id), ['heavy']);
+
+  const queuedHeavyName = afterDismiss.enemyIntelQueue[0].name;
+  afterDismiss.enemyIntelQueue[0].name = 'state-mutated-name';
+  assert.equal(game.getState().enemyIntelQueue[0].name, queuedHeavyName);
+
+  enemyCatalog.heavy.name = 'catalog-mutated-name';
+  assert.equal(game.getState().enemyIntelQueue[0].name, queuedHeavyName);
+
+  game.restart();
+  game.start();
+  game.tick(0);
+
+  assert.deepEqual(game.getState().enemyIntelQueue.map((enemy) => enemy.id), ['infantry']);
+});

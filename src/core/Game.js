@@ -320,7 +320,7 @@ export class Game {
       return;
     }
     this.seenEnemyTypes.add(templateId);
-    this.enemyIntelQueue.push(template);
+    this.enemyIntelQueue.push(structuredClone(template));
   }
 
   dismissEnemyIntel(templateId) {

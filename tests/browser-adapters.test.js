@@ -7,6 +7,7 @@ import {
   buildEnemyIntelModel,
   buildOperatorSpBarModel,
   buildSkillPanelModel,
+  UIController,
   formatBattleTime,
   importMapJsonIntoList
 } from '../src/ui/UIController.js';
@@ -396,3 +397,164 @@ test('enemy intel model summarizes range and traits', () => {
   assert.equal(model.rangeSummary, '菱形2');
   assert.deepEqual(model.traits, ['法术', '远程', '防阻挡2', '精英']);
 });
+
+test('enemy intel model defaults missing optional fields', () => {
+  const model = buildEnemyIntelModel({ id: 'x', name: 'X' });
+
+  assert.equal(model.resistance, 0);
+  assert.equal(typeof model.rangeSummary, 'string');
+  assert.equal(model.rangeSummary.includes('NaN'), false);
+  assert.equal(model.phaseCount, 0);
+  assert.deepEqual(model.traits, []);
+});
+
+test('enemy intel render treats custom catalog text as text content', () => {
+  const panel = createFakeElement('aside');
+  const originalDocument = globalThis.document;
+  globalThis.document = {
+    createElement: (tagName) => createFakeElement(tagName)
+  };
+
+  try {
+    UIController.prototype.renderEnemyIntel.call({
+      enemyIntelPanel: panel,
+      root: createFakeElement('div')
+    }, {
+      enemyIntelQueue: [{
+        id: 'bad"id',
+        name: '<img src=x onerror=alert(1)>',
+        maxHp: 1,
+        attack: 2,
+        defense: 3,
+        resistance: 0,
+        speed: 1,
+        range: { type: 'diamond', radius: 1 },
+        damageType: 'arts',
+        description: '<script>alert(1)</script>'
+      }]
+    });
+  } finally {
+    globalThis.document = originalDocument;
+  }
+
+  assert.equal(panel.innerHTML.includes('<img'), false);
+  assert.equal(panel.innerHTML.includes('<script>'), false);
+  assert.equal(panel.innerHTML.includes('&lt;img'), true);
+  assert.equal(panel.innerHTML.includes('&lt;script&gt;'), true);
+  const closeButton = panel.querySelector('[data-enemy-intel-close]');
+  assert.equal(closeButton?.dataset.enemyIntelClose, 'bad"id');
+  assert.equal(closeButton?.attributes['aria-label'], '关闭敌人情报');
+});
+
+function createFakeElement(tagName) {
+  const element = {
+    tagName,
+    attributes: {},
+    children: [],
+    dataset: {},
+    _textContent: '',
+    _rawInnerHTML: null,
+    classList: {
+      values: new Set(),
+      add(...classes) {
+        classes.forEach((className) => this.values.add(className));
+      },
+      remove(...classes) {
+        classes.forEach((className) => this.values.delete(className));
+      },
+      contains(className) {
+        return this.values.has(className);
+      }
+    },
+    appendChild(child) {
+      this._rawInnerHTML = null;
+      this.children.push(child);
+      return child;
+    },
+    replaceChildren(...children) {
+      this._rawInnerHTML = null;
+      this._textContent = '';
+      this.children = children;
+    },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+    querySelector(selector) {
+      if (selector === '[data-enemy-intel-close]' && this.dataset.enemyIntelClose !== undefined) {
+        return this;
+      }
+      for (const child of this.children) {
+        const found = child.querySelector(selector);
+        if (found) {
+          return found;
+        }
+      }
+      return null;
+    }
+  };
+
+  Object.defineProperty(element, 'className', {
+    get() {
+      return Array.from(this.classList.values).join(' ');
+    },
+    set(value) {
+      this.classList.values = new Set(String(value).split(/\s+/).filter(Boolean));
+    }
+  });
+
+  Object.defineProperty(element, 'textContent', {
+    get() {
+      return element._textContent;
+    },
+    set(value) {
+      element._rawInnerHTML = null;
+      element.children = [];
+      element._textContent = String(value);
+    }
+  });
+
+  Object.defineProperty(element, 'innerHTML', {
+    get() {
+      if (element._rawInnerHTML !== null) {
+        return element._rawInnerHTML;
+      }
+      return serializeFakeElementChildren(element);
+    },
+    set(value) {
+      element.children = [];
+      element._textContent = '';
+      element._rawInnerHTML = String(value);
+    }
+  });
+
+  return element;
+}
+
+function serializeFakeElementChildren(element) {
+  return [
+    escapeFakeHtml(element._textContent),
+    ...element.children.map((child) => serializeFakeElement(child))
+  ].join('');
+}
+
+function serializeFakeElement(element) {
+  const attrs = { ...element.attributes };
+  if (element.className) {
+    attrs.class = element.className;
+  }
+  Object.entries(element.dataset).forEach(([key, value]) => {
+    attrs[`data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`] = value;
+  });
+  const attrText = Object.entries(attrs)
+    .map(([key, value]) => ` ${key}="${escapeFakeHtml(value)}"`)
+    .join('');
+  return `<${element.tagName}${attrText}>${serializeFakeElementChildren(element)}</${element.tagName}>`;
+}
+
+function escapeFakeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
