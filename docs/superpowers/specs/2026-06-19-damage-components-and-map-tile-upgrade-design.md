@@ -21,6 +21,7 @@ This phase includes:
 - Path tile deployability metadata.
 - Enemy `blockBypass` editing in the custom editor.
 - Enemy `lifeValue` deducted from base life on leak.
+- Path waypoint actions that pause enemies or add attack/defense modules at intermediate path nodes.
 - Three experimental maps that demonstrate the new mechanics after implementation.
 - Default data and stored custom catalog migration to the new structure.
 
@@ -225,9 +226,72 @@ Entry and exit tiles are derived from each path:
 
 If several paths share a tile, entry/exit rendering takes priority over ordinary path rendering. If a tile is both entry and exit because of malformed short paths, validation should reject the path because paths must contain at least two points.
 
-## 8. Editors
+## 8. Path Waypoint Actions
 
-### 8.1 Custom Editor
+Paths can define actions that run when an enemy reaches a specific intermediate path node.
+
+```js
+paths: [{
+  id: 'main',
+  points: [{ x: 0, y: 2 }, { x: 3, y: 2 }, { x: 7, y: 2 }],
+  waypointActions: [{
+    id: 'main-hold-1',
+    pointIndex: 1,
+    oncePerEnemy: true,
+    actions: [
+      { type: 'pause', duration: 2.5 },
+      {
+        type: 'add_attack_module',
+        module: {
+          id: 'node-volley',
+          duration: 10,
+          normalAttack: {
+            interval: 1.2,
+            range: { type: 'diamond', radius: 2 },
+            targeting: 'nearest',
+            components: [{ type: 'arts', value: 18 }]
+          }
+        }
+      },
+      {
+        type: 'add_defense_module',
+        module: {
+          id: 'armor-plating',
+          duration: 8,
+          defenseDelta: 20,
+          resistanceDelta: 15
+        }
+      }
+    ]
+  }]
+}]
+```
+
+Rules:
+
+- `pointIndex` references a path point by zero-based index.
+- `pointIndex` must reference an intermediate point, not the entry or exit point.
+- `oncePerEnemy: true` means the same enemy triggers that waypoint once.
+- A paused enemy stops path movement but remains targetable and can still attack if its attack module allows a target in range.
+- `add_attack_module` adds a temporary or permanent attack module to the enemy. If `duration` is omitted or `null`, the module lasts until the enemy dies or changes phase.
+- `add_defense_module` adds defense and resistance deltas. Resistance still clamps to `0..100`.
+- Modules are removed when their duration expires, when the enemy dies, or when the enemy advances into a phase that does not preserve modules.
+- If several actions exist on the same waypoint, they run in array order.
+
+Runtime enemy fields:
+
+```js
+movementPauseRemaining: 0,
+triggeredWaypointActionIds: [],
+attackModules: [],
+defenseModules: []
+```
+
+Combat reads `normalAttack` plus active `attackModules`. Defense reads base defense/resistance plus active `defenseModules`.
+
+## 9. Editors
+
+### 9.1 Custom Editor
 
 The custom editor must support:
 
@@ -246,7 +310,7 @@ The range painter can be reused for:
 - Enemy normal attack range.
 - Enemy skill range.
 
-### 8.2 Map Editor
+### 9.2 Map Editor
 
 The map editor adds a deployability tool:
 
@@ -255,14 +319,19 @@ The map editor adds a deployability tool:
 - Multi-cell drag and Shift-box selection apply to deployability edits.
 - Exported map JSON includes `tileMeta`.
 - Imported maps without `tileMeta` behave as fully deployable path maps except entry/exit tiles.
+- Path point editing includes a waypoint action panel for intermediate nodes.
+- The waypoint action panel supports adding pause, attack-module, and defense-module actions.
+- Entry and exit points cannot receive waypoint actions.
 
-## 9. Rendering
+## 10. Rendering
 
 Battle renderer:
 
 - Entry path tile: red overlay.
 - Exit path tile: blue overlay.
 - Ground-forbidden path tile: darker path tile with diagonal hatch or warning border.
+- Waypoint action nodes: small tactical marker over the path point.
+- Paused enemies: movement pause indicator above the enemy.
 - Operator neural bar above HP/SP when `neuralDamage > 0`.
 - Operator SP bar uses active skill drain ratio while a duration skill is active.
 - Enemy intel panel displays range, components, block bypass, and life value.
@@ -271,12 +340,13 @@ Editor renderer:
 
 - Same entry, exit, and forbidden path tile overlays.
 - Path point numbering remains visible.
+- Waypoint action markers remain visible on configured path points.
 
-## 10. Experimental Maps
+## 11. Experimental Maps
 
 After the mechanics are implemented, add three map JSON files under `maps/` and include them in the battle page map library defaults.
 
-### 10.1 Neural Damage Lab
+### 11.1 Neural Damage Lab
 
 File: `maps/neural-damage-lab.json`
 
@@ -293,7 +363,7 @@ Required mechanics shown:
 - Enemy attack range.
 - Operator SP drain during active skills.
 
-### 10.2 Restricted Entry Test
+### 11.2 Restricted Entry Test
 
 File: `maps/restricted-entry-test.json`
 
@@ -310,7 +380,7 @@ Required mechanics shown:
 - `tileMeta` forbidden path tiles cannot be deployed on.
 - Forbidden path tiles have distinct rendering in battle and editor.
 
-### 10.3 High Value Breakthrough
+### 11.3 High Value Breakthrough
 
 File: `maps/high-value-breakthrough.json`
 
@@ -326,12 +396,13 @@ Required mechanics shown:
 - `blockBypass` lets enemies pass low-block operators.
 - Enemy HP-threshold skills trigger once.
 - Multi-component damage from skills.
+- Waypoint actions pause selected enemies and add temporary defense or ranged attack modules.
 
 These maps are experimental validation assets, not replacement default progression maps. They should appear after the existing three default maps in selection order.
 
-## 11. Migration
+## 12. Migration
 
-### 11.1 Operator Migration
+### 12.1 Operator Migration
 
 Legacy operator fields:
 
@@ -366,7 +437,7 @@ Legacy skill types map as follows:
 - `buff` keeps duration and maps multipliers into `effects`.
 - `next_attack` becomes a duration or single-use effect `{ type: 'next_attack_multiplier', value }`.
 
-### 11.2 Enemy Migration
+### 12.2 Enemy Migration
 
 Legacy enemy fields:
 
@@ -395,7 +466,9 @@ Legacy `resistance <= 1` values are multiplied by `100`.
 
 Legacy enemies without `lifeValue` receive `lifeValue: 1`.
 
-## 12. Testing Strategy
+Legacy paths without `waypointActions` receive an empty action list.
+
+## 13. Testing Strategy
 
 Add focused tests before implementation:
 
@@ -419,9 +492,13 @@ Add focused tests before implementation:
 - `tests/game.test.js`
   - enemy leak deducts `lifeValue`.
   - active skill SP ratio drains with duration.
+  - waypoint pause stops movement and then resumes movement.
+  - waypoint attack module lets an enemy gain a ranged attack after reaching the node.
+  - waypoint defense module changes incoming physical and arts damage until it expires.
 - `tests/editor-model.test.js`
   - map editor exports `tileMeta`.
   - batch deployability edits work.
+  - path waypoint actions validate and export only on intermediate nodes.
 - `tests/custom-editor-model.test.js`
   - custom enemy edits `blockBypass` and `lifeValue`.
   - custom skills can store multiple components.
@@ -445,8 +522,9 @@ Browser verification should check:
 - The three experimental maps appear after the existing default maps.
 - Custom editor can edit a component.
 - Map editor can mark a path tile forbidden and export it.
+- Map editor can configure a waypoint pause action and export it.
 
-## 13. Implementation Order
+## 14. Implementation Order
 
 1. Create `DamageSystem` and migrate validators.
 2. Update default operators and enemies to new structures.
@@ -454,14 +532,15 @@ Browser verification should check:
 4. Replace combat calculations with damage components.
 5. Replace skill activation with the new unified skill/effect model.
 6. Add enemy HP-threshold skill processing.
-7. Add `tileMeta`, entry/exit deployment blocking, and `lifeValue` leak logic.
-8. Update Canvas rendering and UI view models.
-9. Update custom editor.
-10. Update map editor.
-11. Add three experimental maps and register them as default selectable maps.
-12. Run full automated and browser verification.
+7. Add waypoint action parsing, pause handling, and attack/defense module application.
+8. Add `tileMeta`, entry/exit deployment blocking, and `lifeValue` leak logic.
+9. Update Canvas rendering and UI view models.
+10. Update custom editor.
+11. Update map editor.
+12. Add three experimental maps and register them as default selectable maps.
+13. Run full automated and browser verification.
 
-## 14. Compatibility Decisions
+## 15. Compatibility Decisions
 
 Runtime code should prefer new structures. Legacy structures are handled only at catalog/map loading boundaries.
 
