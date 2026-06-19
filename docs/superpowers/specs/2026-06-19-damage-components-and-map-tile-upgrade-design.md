@@ -21,6 +21,7 @@ This phase includes:
 - Path tile deployability metadata.
 - Enemy `blockBypass` editing in the custom editor.
 - Enemy `lifeValue` deducted from base life on leak.
+- Three experimental maps that demonstrate the new mechanics after implementation.
 - Default data and stored custom catalog migration to the new structure.
 
 This phase does not include:
@@ -271,9 +272,66 @@ Editor renderer:
 - Same entry, exit, and forbidden path tile overlays.
 - Path point numbering remains visible.
 
-## 10. Migration
+## 10. Experimental Maps
 
-### 10.1 Operator Migration
+After the mechanics are implemented, add three map JSON files under `maps/` and include them in the battle page map library defaults.
+
+### 10.1 Neural Damage Lab
+
+File: `maps/neural-damage-lab.json`
+
+Purpose:
+
+- Demonstrates enemy neural damage components.
+- Forces players to watch operator neural bars, rotate blockers, and use healing/defensive skills.
+- Uses enemies with ranged neural skills and ordinary physical attacks so the difference between HP loss and neural buildup is visible.
+
+Required mechanics shown:
+
+- Neural damage accumulation.
+- Neural burst HP loss.
+- Enemy attack range.
+- Operator SP drain during active skills.
+
+### 10.2 Restricted Entry Test
+
+File: `maps/restricted-entry-test.json`
+
+Purpose:
+
+- Demonstrates red entry tiles, blue exit tiles, and ground forbidden path tiles.
+- Uses paths where tempting choke points are marked as non-deployable, requiring placement around the route.
+- Includes at least two paths so entry/exit overlays are visible in multiple places.
+
+Required mechanics shown:
+
+- Entry tiles cannot be deployed on.
+- Exit tiles cannot be deployed on.
+- `tileMeta` forbidden path tiles cannot be deployed on.
+- Forbidden path tiles have distinct rendering in battle and editor.
+
+### 10.3 High Value Breakthrough
+
+File: `maps/high-value-breakthrough.json`
+
+Purpose:
+
+- Demonstrates enemy `lifeValue`, `blockBypass`, and HP-threshold skills.
+- Uses a small number of high-value enemies so one leak causes major base life loss.
+- Includes enemies whose HP-threshold skill changes pressure near the front line.
+
+Required mechanics shown:
+
+- `lifeValue` deducts more than one life on leak.
+- `blockBypass` lets enemies pass low-block operators.
+- Enemy HP-threshold skills trigger once.
+- Multi-component damage from skills.
+
+These maps are experimental validation assets, not replacement default progression maps. They should appear after the existing three default maps in selection order.
+
+## 11. Migration
+
+### 11.1 Operator Migration
 
 Legacy operator fields:
 
@@ -308,7 +366,7 @@ Legacy skill types map as follows:
 - `buff` keeps duration and maps multipliers into `effects`.
 - `next_attack` becomes a duration or single-use effect `{ type: 'next_attack_multiplier', value }`.
 
-### 10.2 Enemy Migration
+### 11.2 Enemy Migration
 
 Legacy enemy fields:
 
@@ -337,7 +395,7 @@ Legacy `resistance <= 1` values are multiplied by `100`.
 
 Legacy enemies without `lifeValue` receive `lifeValue: 1`.
 
-## 11. Testing Strategy
+## 12. Testing Strategy
 
 Add focused tests before implementation:
 
@@ -369,6 +427,9 @@ Add focused tests before implementation:
   - custom skills can store multiple components.
 - `tests/browser-adapters.test.js`
   - UI view models expose components, life value, block bypass, neural ratio, and active SP ratio.
+- `tests/default-maps.test.js`
+  - the three experimental maps normalize and validate.
+  - each experimental map contains the expected showcase mechanic fields.
 
 Full verification remains:
 
@@ -381,10 +442,11 @@ Browser verification should check:
 
 - Battle page loads.
 - Default maps remain playable.
+- The three experimental maps appear after the existing default maps.
 - Custom editor can edit a component.
 - Map editor can mark a path tile forbidden and export it.
 
-## 12. Implementation Order
+## 13. Implementation Order
 
 1. Create `DamageSystem` and migrate validators.
 2. Update default operators and enemies to new structures.
@@ -396,9 +458,10 @@ Browser verification should check:
 8. Update Canvas rendering and UI view models.
 9. Update custom editor.
 10. Update map editor.
-11. Run full automated and browser verification.
+11. Add three experimental maps and register them as default selectable maps.
+12. Run full automated and browser verification.
 
-## 13. Compatibility Decisions
+## 14. Compatibility Decisions
 
 Runtime code should prefer new structures. Legacy structures are handled only at catalog/map loading boundaries.
 
