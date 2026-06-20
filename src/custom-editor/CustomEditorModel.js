@@ -75,6 +75,9 @@ export function updateSelectedTemplate(state, patch) {
     ...current,
     ...patch
   };
+  if (Object.hasOwn(patch, 'deployType') && !Object.hasOwn(patch, 'deployTypes')) {
+    updated.deployTypes = [patch.deployType];
+  }
   const nextId = patch.id && patch.id !== current.id ? String(patch.id).trim() : current.id;
   updated.id = nextId;
 
@@ -88,42 +91,52 @@ export function updateSelectedTemplate(state, patch) {
 }
 
 export function applyRangePresetToSelected(state, presetName) {
-  ensureOperatorSelected(state);
+  const range = rangePreset(presetName);
+  const selected = getSelectedTemplate(state);
   return updateSelectedTemplate(state, {
-    range: rangePreset(presetName)
+    range,
+    normalAttack: {
+      ...normalAttackWithComponentIds(selected.normalAttack, selected),
+      range
+    }
   });
 }
 
 export function toggleRangeCellForSelected(state, cell) {
-  ensureOperatorSelected(state);
   const selected = getSelectedTemplate(state);
-  const range = normalizeRange(selected.range?.type === 'pattern' ? selected.range : { type: 'pattern', cells: [{ x: 0, y: 0 }] });
+  const currentRange = selected.normalAttack?.range ?? selected.range;
+  const range = normalizeRange(currentRange?.type === 'pattern' ? currentRange : { type: 'pattern', cells: [{ x: 0, y: 0 }] });
   const key = `${cell.x},${cell.y}`;
   const existing = new Set(range.cells.map((item) => `${item.x},${item.y}`));
   const cells = existing.has(key)
     ? range.cells.filter((item) => `${item.x},${item.y}` !== key)
     : [...range.cells, { x: cell.x, y: cell.y }];
+  const nextRange = normalizeRange({ type: 'pattern', cells: cells.length > 0 ? cells : [{ x: 0, y: 0 }] });
   return updateSelectedTemplate(state, {
-    range: normalizeRange({ type: 'pattern', cells: cells.length > 0 ? cells : [{ x: 0, y: 0 }] })
+    range: nextRange,
+    normalAttack: {
+      ...normalAttackWithComponentIds(selected.normalAttack, selected),
+      range: nextRange
+    }
   });
 }
 
 export function addSkillToSelected(state) {
-  ensureOperatorSelected(state);
   const selected = getSelectedTemplate(state);
-  const skills = operatorSkills(selected);
-  if (skills.length >= 3) {
+  const skills = templateSkills(selected);
+  if (state.selectedKind === 'operators' && skills.length >= 3) {
     throw new Error('一个干员最多 3 个技能');
   }
 
-  const nextSkill = createDefaultSkill(skills);
+  const nextSkill = state.selectedKind === 'operators'
+    ? createDefaultSkill(skills)
+    : createDefaultEnemySkill(skills);
   return updateSelectedTemplate(state, withSkillList(selected, [...skills, nextSkill], `${nextSkill.name} 已添加`));
 }
 
 export function updateSkillForSelected(state, skillId, patch) {
-  ensureOperatorSelected(state);
   const selected = getSelectedTemplate(state);
-  const skills = operatorSkills(selected);
+  const skills = templateSkills(selected);
   const index = skills.findIndex((skill) => skill.id === skillId);
   if (index === -1) {
     throw new Error(`Skill ${skillId} does not exist`);
@@ -133,6 +146,9 @@ export function updateSkillForSelected(state, skillId, patch) {
     ...skills[index],
     ...patch
   };
+  if (patch.components) {
+    updated.components = patch.components;
+  }
   if (patch.effect) {
     updated.effect = {
       ...(skills[index].effect ?? {}),
@@ -146,10 +162,56 @@ export function updateSkillForSelected(state, skillId, patch) {
   return updateSelectedTemplate(state, withSkillList(selected, nextSkills, '技能已更新'));
 }
 
-export function removeSkillFromSelected(state, skillId) {
-  ensureOperatorSelected(state);
+export function addDamageComponentToSelectedSkill(state, skillId, type = 'physical') {
   const selected = getSelectedTemplate(state);
-  const skills = operatorSkills(selected);
+  const skills = templateSkills(selected);
+  const skill = skillWithComponentIds(skills.find((item) => item.id === skillId));
+  if (!skill) {
+    throw new Error(`Skill ${skillId} does not exist`);
+  }
+  const nextComponent = {
+    id: nextSequentialId('component', Object.fromEntries(skill.components.map((component) => [component.id, component]))),
+    type,
+    value: 0
+  };
+  return updateSkillForSelected(state, skillId, {
+    components: [nextComponent, ...skill.components]
+  });
+}
+
+export function updateSkillComponentForSelected(state, skillId, componentId, patch) {
+  const selected = getSelectedTemplate(state);
+  const skills = templateSkills(selected);
+  const skill = skillWithComponentIds(skills.find((item) => item.id === skillId));
+  if (!skill) {
+    throw new Error(`Skill ${skillId} does not exist`);
+  }
+  const components = skill.components.map((component) => {
+    return component.id === componentId ? { ...component, ...patch } : component;
+  });
+  if (!components.some((component) => component.id === componentId)) {
+    throw new Error(`Skill component ${componentId} does not exist`);
+  }
+  return updateSkillForSelected(state, skillId, { components });
+}
+
+export function removeSkillComponentForSelected(state, skillId, componentId) {
+  const selected = getSelectedTemplate(state);
+  const skills = templateSkills(selected);
+  const skill = skillWithComponentIds(skills.find((item) => item.id === skillId));
+  if (!skill) {
+    throw new Error(`Skill ${skillId} does not exist`);
+  }
+  const components = skill.components.filter((component) => component.id !== componentId);
+  if (components.length === skill.components.length) {
+    throw new Error(`Skill component ${componentId} does not exist`);
+  }
+  return updateSkillForSelected(state, skillId, { components });
+}
+
+export function removeSkillFromSelected(state, skillId) {
+  const selected = getSelectedTemplate(state);
+  const skills = templateSkills(selected);
   const nextSkills = skills.filter((skill) => skill.id !== skillId);
   if (nextSkills.length === skills.length) {
     throw new Error(`Skill ${skillId} does not exist`);
@@ -164,9 +226,8 @@ export function applySkillRangePresetToSelected(state, skillId, presetName) {
 }
 
 export function toggleSkillRangeCellForSelected(state, skillId, cell) {
-  ensureOperatorSelected(state);
   const selected = getSelectedTemplate(state);
-  const skill = operatorSkills(selected).find((item) => item.id === skillId);
+  const skill = templateSkills(selected).find((item) => item.id === skillId);
   if (!skill) {
     throw new Error(`Skill ${skillId} does not exist`);
   }
@@ -178,6 +239,54 @@ export function toggleSkillRangeCellForSelected(state, skillId, cell) {
     : [...range.cells, { x: cell.x, y: cell.y }];
   return updateSkillForSelected(state, skillId, {
     range: normalizeRange({ type: 'pattern', cells: cells.length > 0 ? cells : [{ x: 0, y: 0 }] })
+  });
+}
+
+export function addDamageComponentToSelectedNormalAttack(state, type = 'physical') {
+  const selected = getSelectedTemplate(state);
+  const normalAttack = normalAttackWithComponentIds(selected.normalAttack, selected);
+  const nextComponent = {
+    id: nextSequentialId('component', Object.fromEntries(normalAttack.components.map((component) => [component.id, component]))),
+    type,
+    value: 0
+  };
+  return updateSelectedTemplate(state, {
+    normalAttack: {
+      ...normalAttack,
+      components: [nextComponent, ...normalAttack.components]
+    }
+  });
+}
+
+export function updateNormalAttackComponentForSelected(state, componentId, patch) {
+  const selected = getSelectedTemplate(state);
+  const normalAttack = normalAttackWithComponentIds(selected.normalAttack, selected);
+  const components = normalAttack.components.map((component) => {
+    return component.id === componentId ? { ...component, ...patch } : component;
+  });
+  if (!components.some((component) => component.id === componentId)) {
+    throw new Error(`Damage component ${componentId} does not exist`);
+  }
+  return updateSelectedTemplate(state, {
+    normalAttack: {
+      ...normalAttack,
+      components
+    }
+  });
+}
+
+export function removeNormalAttackComponentForSelected(state, componentId) {
+  const selected = getSelectedTemplate(state);
+  const normalAttack = normalAttackWithComponentIds(selected.normalAttack, selected);
+  const components = normalAttack.components.filter((component) => component.id !== componentId);
+  if (components.length === normalAttack.components.length) {
+    throw new Error(`Damage component ${componentId} does not exist`);
+  }
+  return updateSelectedTemplate(state, {
+    normalAttack: {
+      ...normalAttack,
+      components
+    }
   });
 }
 
@@ -258,7 +367,7 @@ function ensureOperatorSelected(state) {
   }
 }
 
-function operatorSkills(template) {
+function templateSkills(template) {
   return structuredClone(template.skills ?? [template.skill].filter(Boolean));
 }
 
@@ -279,7 +388,56 @@ function createDefaultSkill(existingSkills) {
     triggerMode: 'manual',
     type: 'buff',
     duration: 8,
-    effect: { attackMultiplier: 1.2 }
+    effect: { attackMultiplier: 1.2 },
+    components: []
+  };
+}
+
+function createDefaultEnemySkill(existingSkills) {
+  const id = nextSequentialId('enemy-skill', Object.fromEntries(existingSkills.map((skill) => [skill.id, skill])));
+  return {
+    id,
+    name: `敌方技能 ${existingSkills.length + 1}`,
+    description: '生命降低到阈值时释放。',
+    triggerMode: 'hp_threshold',
+    hpThresholdPercent: 50,
+    range: rangePreset('front-line-3'),
+    targeting: 'nearest',
+    components: [{ id: 'component-1', type: 'physical', value: 10 }],
+    effects: []
+  };
+}
+
+function normalAttackWithComponentIds(normalAttack, template) {
+  const attack = structuredClone(normalAttack ?? {
+    interval: template.attackInterval ?? 1.5,
+    range: template.range ?? rangePreset('front-line-3'),
+    targeting: template.targeting ?? 'exit-first',
+    components: template.damageType === 'physical' || template.damageType === 'arts' || template.damageType === 'heal'
+      ? [{ type: template.damageType, value: template.attack ?? 0 }]
+      : [],
+    effects: []
+  });
+  return {
+    ...attack,
+    components: (attack.components ?? []).map((component, index) => ({
+      id: component.id ?? `component-${index + 1}`,
+      ...component
+    })),
+    effects: attack.effects ?? []
+  };
+}
+
+function skillWithComponentIds(skill) {
+  if (!skill) {
+    return null;
+  }
+  return {
+    ...structuredClone(skill),
+    components: (skill.components ?? []).map((component, index) => ({
+      id: component.id ?? `component-${index + 1}`,
+      ...component
+    }))
   };
 }
 

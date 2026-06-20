@@ -2,8 +2,10 @@ import { normalizeMap, validateMap } from '../data/MapLoader.js';
 import { isCellInBounds, isSameCell } from '../utils/GridMath.js';
 
 const VALID_CELL_TYPES = new Set(['path', 'high', 'wall']);
+const WAYPOINT_ACTION_TYPES = new Set(['pause', 'add_attack_module', 'add_defense_module']);
 let pathSequence = 0;
 let eventSequence = 0;
+let waypointActionSequence = 0;
 
 export function createEditorState({
   width = 10,
@@ -23,6 +25,7 @@ export function createEditorState({
     maxLives: 10,
     totalWaves: 3,
     grid: Array.from({ length: height }, () => Array.from({ length: width }, () => 'wall')),
+    tileMeta: {},
     paths: [],
     timeline: []
   };
@@ -48,8 +51,10 @@ export function paintCells(state, cells, type, options = {}) {
   const next = cloneState(state);
 
   targetCells.forEach((cell) => {
-    const previousType = next.map.grid[cell.y][cell.x];
     next.map.grid[cell.y][cell.x] = type;
+    if (type !== 'path') {
+      delete next.map.tileMeta?.[cellKey(cell)];
+    }
   });
 
   if (type !== 'path') {
@@ -69,6 +74,30 @@ export function paintCells(state, cells, type, options = {}) {
   }
 
   normalizeAllPathEndpoints(next);
+  normalizeAllWaypointActions(next);
+  return next;
+}
+
+export function setCellsDeployable(state, cells, deployable) {
+  const targetCells = uniqueInBoundsCells(cells, state.map.width, state.map.height);
+  const next = cloneState(state);
+  next.map.tileMeta ??= {};
+
+  targetCells.forEach((cell) => {
+    if (next.map.grid[cell.y]?.[cell.x] !== 'path') {
+      delete next.map.tileMeta[cellKey(cell)];
+      return;
+    }
+    if (deployable === false) {
+      next.map.tileMeta[cellKey(cell)] = {
+        ...(next.map.tileMeta[cellKey(cell)] ?? {}),
+        deployable: false
+      };
+      return;
+    }
+    delete next.map.tileMeta[cellKey(cell)];
+  });
+
   return next;
 }
 
@@ -102,12 +131,14 @@ export function resizeMap(state, width, height, fillType = 'wall') {
     ...next.map,
     width: nextWidth,
     height: nextHeight,
-    grid
+    grid,
+    tileMeta: cropTileMeta(next.map.tileMeta, nextWidth, nextHeight, grid)
   };
   next.map.paths.forEach((path) => {
     path.points = path.points.filter((point) => isCellInBounds(point, nextWidth, nextHeight));
   });
   normalizeAllPathEndpoints(next);
+  normalizeAllWaypointActions(next);
   return next;
 }
 
@@ -130,7 +161,8 @@ export function addPath(state, name = '新路径') {
     exit: null,
     points: [],
     color: pathColor(pathSequence),
-    lifeDamage: 1
+    lifeDamage: 1,
+    waypointActions: []
   };
   next.map.paths.push(path);
   next.selectedPathId = path.id;
@@ -141,7 +173,9 @@ export function updatePath(state, pathId, patch) {
   const next = cloneState(state);
   const path = findPath(next, pathId);
   Object.assign(path, patch);
-  return normalizePathEndpoints(next, path.id);
+  normalizePathEndpoints(next, path.id);
+  normalizeWaypointActionsForPath(path);
+  return next;
 }
 
 export function removePath(state, pathId) {
@@ -163,6 +197,53 @@ export function selectPath(state, pathId) {
     ...cloneState(state),
     selectedPathId: pathId
   };
+}
+
+export function addWaypointAction(state, pathId, pointIndex, action) {
+  const next = cloneState(state);
+  const path = findPath(next, pathId);
+  assertIntermediatePoint(path, pointIndex);
+  waypointActionSequence += 1;
+  path.waypointActions ??= [];
+  path.waypointActions.push({
+    id: `waypoint-action-${waypointActionSequence}`,
+    pointIndex: Number(pointIndex),
+    oncePerEnemy: true,
+    actions: [normalizeEditorWaypointAction(action)]
+  });
+  return next;
+}
+
+export function updateWaypointAction(state, pathId, actionId, patch) {
+  const next = cloneState(state);
+  const path = findPath(next, pathId);
+  const waypoint = (path.waypointActions ?? []).find((item) => item.id === actionId);
+  if (!waypoint) {
+    throw new Error(`Waypoint action ${actionId} does not exist`);
+  }
+
+  if (patch.pointIndex !== undefined) {
+    assertIntermediatePoint(path, Number(patch.pointIndex));
+    waypoint.pointIndex = Number(patch.pointIndex);
+  }
+  if (patch.oncePerEnemy !== undefined) {
+    waypoint.oncePerEnemy = Boolean(patch.oncePerEnemy);
+  }
+  if (patch.actions !== undefined) {
+    waypoint.actions = patch.actions.map(normalizeEditorWaypointAction);
+  }
+  if (patch.action !== undefined) {
+    waypoint.actions = [normalizeEditorWaypointAction(patch.action)];
+  }
+
+  return next;
+}
+
+export function removeWaypointAction(state, pathId, actionId) {
+  const next = cloneState(state);
+  const path = findPath(next, pathId);
+  path.waypointActions = (path.waypointActions ?? []).filter((waypoint) => waypoint.id !== actionId);
+  return next;
 }
 
 export function addPointToSelectedPath(state, cell) {
@@ -279,6 +360,7 @@ export function buildTimelinePreviewModel(timelineEvents, totalWaves = 1) {
 export function toMapJson(state) {
   const map = {
     ...state.map,
+    tileMeta: normalizeExportTileMeta(state.map),
     paths: state.map.paths.map((path) => normalizeExportPath(path)),
     timeline: state.timelineEvents.map(stripEventId)
   };
@@ -315,11 +397,18 @@ export function loadMapIntoEditor(rawMap) {
     if (match) {
       pathSequence = Math.max(pathSequence, Number(match[1]));
     }
+    (path.waypointActions ?? []).forEach((waypoint) => {
+      const waypointMatch = /^waypoint-action-(\d+)$/.exec(waypoint.id);
+      if (waypointMatch) {
+        waypointActionSequence = Math.max(waypointActionSequence, Number(waypointMatch[1]));
+      }
+    });
   });
 
   return {
     map: {
       ...map,
+      tileMeta: normalizeExportTileMeta(map),
       timeline: timelineEvents.map(stripEventId)
     },
     selectedTool: 'path',
@@ -356,6 +445,23 @@ function normalizeAllPathEndpoints(state) {
   return state;
 }
 
+function normalizeAllWaypointActions(state) {
+  state.map.paths.forEach(normalizeWaypointActionsForPath);
+  return state;
+}
+
+function normalizeWaypointActionsForPath(path) {
+  path.waypointActions = (path.waypointActions ?? []).filter((waypoint) => {
+    return Number.isInteger(Number(waypoint.pointIndex))
+      && Number(waypoint.pointIndex) > 0
+      && Number(waypoint.pointIndex) < path.points.length - 1;
+  }).map((waypoint) => ({
+    ...waypoint,
+    pointIndex: Number(waypoint.pointIndex),
+    actions: (waypoint.actions ?? []).map(normalizeEditorWaypointAction)
+  }));
+}
+
 function removePathPointsAtCells(state, cells) {
   if (cells.length === 0) {
     return state;
@@ -384,6 +490,17 @@ function uniqueInBoundsCells(cells, width, height) {
   return result;
 }
 
+function cropTileMeta(tileMeta = {}, width, height, grid) {
+  return Object.fromEntries(Object.entries(tileMeta).filter(([key, meta]) => {
+    const [x, y] = key.split(',').map(Number);
+    return Number.isInteger(x)
+      && Number.isInteger(y)
+      && isCellInBounds({ x, y }, width, height)
+      && grid[y]?.[x] === 'path'
+      && meta?.deployable === false;
+  }).map(([key, meta]) => [key, { deployable: meta.deployable }]));
+}
+
 function clampInteger(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -401,8 +518,21 @@ function normalizeExportPath(path) {
     exit: points[points.length - 1],
     points,
     color: path.color,
-    lifeDamage: path.lifeDamage ?? 1
+    lifeDamage: path.lifeDamage ?? 1,
+    waypointActions: (path.waypointActions ?? []).map((waypoint) => ({
+      id: waypoint.id,
+      pointIndex: Number(waypoint.pointIndex),
+      oncePerEnemy: waypoint.oncePerEnemy !== false,
+      actions: (waypoint.actions ?? []).map(normalizeEditorWaypointAction)
+    }))
   };
+}
+
+function normalizeExportTileMeta(map) {
+  return Object.fromEntries(Object.entries(map.tileMeta ?? {}).filter(([key, meta]) => {
+    const [x, y] = key.split(',').map(Number);
+    return meta?.deployable === false && map.grid[y]?.[x] === 'path';
+  }).map(([key]) => [key, { deployable: false }]));
 }
 
 function stripEventId(event) {
@@ -433,4 +563,63 @@ function roundPercent(value) {
 function pathColor(index) {
   const colors = ['#f6c445', '#5fc9ff', '#72e0a6', '#b98cff', '#ff8a4d'];
   return colors[(index - 1) % colors.length];
+}
+
+function assertIntermediatePoint(path, pointIndex) {
+  const index = Number(pointIndex);
+  if (!Number.isInteger(index) || index <= 0 || index >= path.points.length - 1) {
+    throw new Error('Waypoint actions must target an intermediate path point');
+  }
+}
+
+function normalizeEditorWaypointAction(action) {
+  if (!WAYPOINT_ACTION_TYPES.has(action?.type)) {
+    throw new Error(`Waypoint action type must be one of ${[...WAYPOINT_ACTION_TYPES].join(', ')}`);
+  }
+
+  if (action.type === 'pause') {
+    return {
+      type: 'pause',
+      duration: Math.max(0, Number(action.duration ?? 1))
+    };
+  }
+
+  if (action.type === 'add_attack_module') {
+    return {
+      type: 'add_attack_module',
+      module: normalizeAttackModule(action.module)
+    };
+  }
+
+  return {
+    type: 'add_defense_module',
+    module: normalizeDefenseModule(action.module)
+  };
+}
+
+function normalizeAttackModule(module = {}) {
+  return {
+    id: module.id ?? `attack-module-${waypointActionSequence}`,
+    duration: Math.max(0, Number(module.duration ?? module.remaining ?? 5)),
+    normalAttack: {
+      interval: Math.max(0.1, Number(module.normalAttack?.interval ?? 1.5)),
+      targeting: module.normalAttack?.targeting ?? 'nearest',
+      range: structuredClone(module.normalAttack?.range ?? { type: 'diamond', radius: 2 }),
+      components: structuredClone(module.normalAttack?.components ?? [{ type: 'arts', value: 25 }]),
+      effects: structuredClone(module.normalAttack?.effects ?? [])
+    }
+  };
+}
+
+function normalizeDefenseModule(module = {}) {
+  return {
+    id: module.id ?? `defense-module-${waypointActionSequence}`,
+    duration: Math.max(0, Number(module.duration ?? module.remaining ?? 5)),
+    defenseDelta: Number(module.defenseDelta ?? 20),
+    resistanceDelta: Number(module.resistanceDelta ?? 0)
+  };
+}
+
+function cellKey(cell) {
+  return `${cell.x},${cell.y}`;
 }

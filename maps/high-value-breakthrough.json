@@ -1,0 +1,92 @@
+{
+  "version": "2.0",
+  "id": "high-value-breakthrough",
+  "name": "高价值突破",
+  "description": "测试高目标价值、两段生命和路径节点动作。",
+  "width": 11,
+  "height": 7,
+  "initialCost": 26,
+  "maxCost": 30,
+  "maxLives": 15,
+  "totalWaves": 4,
+  "grid": [
+    ["wall", "wall", "high", "high", "wall", "wall", "high", "high", "wall", "wall", "wall"],
+    ["wall", "high", "high", "wall", "wall", "path", "wall", "high", "high", "wall", "wall"],
+    ["path", "path", "path", "path", "path", "path", "path", "path", "path", "path", "path"],
+    ["wall", "wall", "wall", "wall", "high", "path", "high", "wall", "wall", "high", "wall"],
+    ["wall", "high", "high", "wall", "wall", "path", "wall", "high", "high", "wall", "wall"],
+    ["wall", "high", "wall", "wall", "wall", "path", "wall", "wall", "high", "wall", "wall"],
+    ["wall", "wall", "wall", "wall", "wall", "path", "wall", "wall", "wall", "wall", "wall"]
+  ],
+  "paths": [
+    {
+      "id": "main",
+      "name": "突破主线",
+      "entry": { "x": 0, "y": 2 },
+      "exit": { "x": 5, "y": 6 },
+      "points": [
+        { "x": 0, "y": 2 },
+        { "x": 1, "y": 2 },
+        { "x": 2, "y": 2 },
+        { "x": 3, "y": 2 },
+        { "x": 4, "y": 2 },
+        { "x": 5, "y": 2 },
+        { "x": 5, "y": 3 },
+        { "x": 5, "y": 4 },
+        { "x": 5, "y": 5 },
+        { "x": 5, "y": 6 }
+      ],
+      "color": "#ff8a4d",
+      "lifeDamage": 1,
+      "waypointActions": [
+        {
+          "id": "hold-at-crossfire",
+          "pointIndex": 5,
+          "oncePerEnemy": true,
+          "actions": [
+            { "type": "pause", "duration": 1.5 },
+            {
+              "type": "add_defense_module",
+              "module": {
+                "id": "emergency-plating",
+                "duration": 5,
+                "defenseDelta": 18,
+                "resistanceDelta": 20
+              }
+            }
+          ]
+        },
+        {
+          "id": "core-overwatch",
+          "pointIndex": 7,
+          "oncePerEnemy": true,
+          "actions": [
+            {
+              "type": "add_attack_module",
+              "module": {
+                "id": "core-pulse-field",
+                "duration": 6,
+                "normalAttack": {
+                  "interval": 1.6,
+                  "range": { "type": "diamond", "radius": 2 },
+                  "targeting": "nearest",
+                  "components": [
+                    { "type": "arts", "value": 20 },
+                    { "type": "neural", "value": 18 }
+                  ],
+                  "effects": []
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    { "wave": 1, "startTime": 2, "enemyType": "infantry", "count": 6, "interval": 0.8, "pathId": "main" },
+    { "wave": 2, "startTime": 18, "enemyType": "block-breacher", "count": 2, "interval": 2.4, "pathId": "main" },
+    { "wave": 3, "startTime": 36, "enemyType": "phase-breaker", "count": 2, "interval": 3.0, "pathId": "main" },
+    { "wave": 4, "startTime": 58, "enemyType": "block-breacher", "count": 3, "interval": 2.0, "pathId": "main" }
+  ]
+}

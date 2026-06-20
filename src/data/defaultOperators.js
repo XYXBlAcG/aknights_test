@@ -4,6 +4,7 @@ export const CLASS_LIMITS = {
   defender: 2,
   sniper: 3,
   caster: 2,
+  specialist: 2,
   medic: 2
 };
 
@@ -26,6 +27,14 @@ export const DEFAULT_OPERATORS = {
     damageType: 'physical',
     range: { type: 'melee', radius: 0 },
     targeting: 'blocked-first',
+    normalAttack: {
+      interval: 1.5,
+      range: { type: 'melee', radius: 0 },
+      targeting: 'blocked-first',
+      components: [{ type: 'physical', value: 18 }],
+      effects: []
+    },
+    effects: [],
     trait: 'deployed_cost_regen',
     skill: {
       id: 'tactical_supply',
@@ -34,7 +43,9 @@ export const DEFAULT_OPERATORS = {
       spCost: 10,
       triggerMode: 'manual',
       type: 'instant_cost',
-      amount: 6
+      amount: 6,
+      components: [],
+      effects: [{ type: 'cost', value: 6 }]
     },
     color: '#f6c445'
   },
@@ -54,6 +65,14 @@ export const DEFAULT_OPERATORS = {
     damageType: 'physical',
     range: { type: 'melee', radius: 0 },
     targeting: 'blocked-first',
+    normalAttack: {
+      interval: 1.2,
+      range: { type: 'melee', radius: 0 },
+      targeting: 'blocked-first',
+      components: [{ type: 'physical', value: 34 }],
+      effects: []
+    },
+    effects: [],
     trait: 'balanced_melee',
     skill: {
       id: 'power_strike',
@@ -63,7 +82,9 @@ export const DEFAULT_OPERATORS = {
       triggerMode: 'manual',
       type: 'buff',
       duration: 10,
-      effect: { attackMultiplier: 1.6 }
+      effect: { attackMultiplier: 1.6 },
+      components: [],
+      effects: [{ type: 'attack_multiplier', value: 1.6, duration: 10 }]
     },
     color: '#ff8a4d'
   },
@@ -77,12 +98,20 @@ export const DEFAULT_OPERATORS = {
     maxHp: 420,
     attack: 18,
     defense: 18,
-    resistance: 0.05,
+    resistance: 5,
     attackInterval: 2.0,
     block: 3,
     damageType: 'physical',
     range: { type: 'melee', radius: 0 },
     targeting: 'blocked-first',
+    normalAttack: {
+      interval: 2.0,
+      range: { type: 'melee', radius: 0 },
+      targeting: 'blocked-first',
+      components: [{ type: 'physical', value: 18 }],
+      effects: []
+    },
+    effects: [],
     trait: 'high_block',
     skill: {
       id: 'hold_line',
@@ -93,7 +122,12 @@ export const DEFAULT_OPERATORS = {
       type: 'buff',
       duration: 10,
       healPercent: 0.2,
-      effect: { defenseMultiplier: 1.8 }
+      effect: { defenseMultiplier: 1.8 },
+      components: [],
+      effects: [
+        { type: 'defense_multiplier', value: 1.8, duration: 10 },
+        { type: 'heal_percent', value: 0.2 }
+      ]
     },
     color: '#85a6ff'
   },
@@ -113,6 +147,14 @@ export const DEFAULT_OPERATORS = {
     damageType: 'physical',
     range: { type: 'diamond', radius: 3 },
     targeting: 'flying-first',
+    normalAttack: {
+      interval: 0.8,
+      range: { type: 'diamond', radius: 3 },
+      targeting: 'flying-first',
+      components: [{ type: 'physical', value: 28 }],
+      effects: []
+    },
+    effects: [],
     trait: 'anti_air',
     skill: {
       id: 'rapid_fire',
@@ -122,7 +164,9 @@ export const DEFAULT_OPERATORS = {
       triggerMode: 'auto',
       type: 'buff',
       duration: 8,
-      effect: { attackIntervalMultiplier: 0.55 }
+      effect: { attackIntervalMultiplier: 0.55 },
+      components: [],
+      effects: [{ type: 'attack_interval_multiplier', value: 0.55, duration: 8 }]
     },
     color: '#5fc9ff'
   },
@@ -136,12 +180,20 @@ export const DEFAULT_OPERATORS = {
     maxHp: 130,
     attack: 58,
     defense: 1,
-    resistance: 0.1,
+    resistance: 10,
     attackInterval: 2.5,
     block: 0,
     damageType: 'arts',
     range: { type: 'diamond', radius: 2.5 },
     targeting: 'high-defense',
+    normalAttack: {
+      interval: 2.5,
+      range: { type: 'diamond', radius: 2.5 },
+      targeting: 'high-defense',
+      components: [{ type: 'arts', value: 58 }],
+      effects: []
+    },
+    effects: [],
     trait: 'arts_damage',
     skill: {
       id: 'arts_overload',
@@ -150,7 +202,9 @@ export const DEFAULT_OPERATORS = {
       spCost: 20,
       triggerMode: 'auto',
       type: 'next_attack',
-      effect: { nextAttackMultiplier: 2.5 }
+      effect: { nextAttackMultiplier: 2.5 },
+      components: [],
+      effects: [{ type: 'next_attack_multiplier', value: 2.5 }]
     },
     color: '#b98cff'
   },
@@ -164,24 +218,77 @@ export const DEFAULT_OPERATORS = {
     maxHp: 130,
     attack: 32,
     defense: 1,
-    resistance: 0.1,
+    resistance: 10,
     attackInterval: 2.0,
     block: 0,
     damageType: 'heal',
     range: { type: 'diamond', radius: 2.5 },
     targeting: 'lowest-hp-percent',
+    normalAttack: {
+      interval: 2.0,
+      range: { type: 'diamond', radius: 2.5 },
+      targeting: 'lowest-hp-percent',
+      components: [],
+      effects: [{ type: 'heal', value: 32 }]
+    },
+    effects: [],
     trait: 'healer',
     skill: {
       id: 'emergency_protocol',
       name: '急救协议',
-      description: '立即治疗范围内生命百分比最低的地面干员80点生命。',
+      description: '立即治疗范围内生命百分比最低的友方干员80点生命。',
       spCost: 14,
       triggerMode: 'auto',
       type: 'instant_heal',
-      amount: 80
+      amount: 80,
+      components: [],
+      effects: [{ type: 'heal', value: 80 }]
     },
     color: '#72e0a6'
+  },
+  specialist: {
+    id: 'specialist',
+    name: '钩索专员',
+    class: 'specialist',
+    className: '特种',
+    deployType: 'ground',
+    deployTypes: ['ground', 'high'],
+    cost: 11,
+    maxHp: 190,
+    attack: 26,
+    defense: 5,
+    resistance: 5,
+    attackInterval: 1.1,
+    block: 1,
+    damageType: 'physical',
+    range: { type: 'pattern', cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }] },
+    targeting: 'exit-first',
+    normalAttack: {
+      interval: 1.1,
+      range: { type: 'pattern', cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }] },
+      targeting: 'exit-first',
+      components: [{ type: 'physical', value: 26 }],
+      effects: []
+    },
+    effects: [],
+    trait: 'flexible_deploy',
+    skill: {
+      id: 'tactical_grapple',
+      name: '战术钩索',
+      description: '8秒内每次攻击追加物理伤害并造成少量神经损伤。',
+      spCost: 16,
+      triggerMode: 'manual',
+      type: 'buff',
+      duration: 8,
+      effect: { attackIntervalMultiplier: 0.8 },
+      components: [
+        { type: 'physical', value: 18 },
+        { type: 'neural', value: 18 }
+      ],
+      effects: [{ type: 'attack_interval_multiplier', value: 0.8, duration: 8 }]
+    },
+    color: '#4ed0b3'
   }
 };
 
-export const DEFAULT_OPERATOR_ORDER = ['vanguard', 'guard', 'defender', 'sniper', 'caster', 'medic'];
+export const DEFAULT_OPERATOR_ORDER = ['vanguard', 'guard', 'defender', 'sniper', 'caster', 'specialist', 'medic'];

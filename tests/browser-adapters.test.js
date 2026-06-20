@@ -1,25 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
+  buildBossHpBarModel,
+  buildFloatingTextLayout,
+  buildForbiddenTileOverlayModel,
   buildEnemyHpBarModel,
+  smoothDisplayedRatio,
   calculateCanvasMetrics,
   rangeCellsFor,
   tileColorForType
 } from '../src/renderers/CanvasRenderer.js';
 import {
+  buildKeyboardShortcutGuideModel,
+  buildMapLibraryPanelModel,
   buildOperatorDeckModel,
   buildRenderKeys,
   buildEnemyIntelModel,
+  buildOperatorNeuralBarModel,
   buildOperatorSpBarModel,
-  buildSkillPanelModel,
   UIController,
   formatBattleTime,
   importMapJsonIntoList
 } from '../src/ui/UIController.js';
+import {
+  buildOperatorDisplayStats,
+  buildSkillPanelModel
+} from '../src/ui/OperatorViewModels.js';
+import { editorLeaveWarningMessage } from '../src/editor/EditorController.js';
 import { DEFAULT_OPERATORS } from '../src/data/defaultOperators.js';
 import { DEFAULT_ENEMIES } from '../src/data/defaultEnemies.js';
 import { buildEnemyOptionsModel } from '../src/editor/EditorController.js';
-import { fieldEditRenderMode } from '../src/custom-editor/CustomEditorController.js';
+import { buildCustomOperatorPreviewModel, fieldEditRenderMode } from '../src/custom-editor/CustomEditorController.js';
 
 test('calculateCanvasMetrics fits map into available canvas area', () => {
   const metrics = calculateCanvasMetrics({ width: 10, height: 5 }, 1000, 600);
@@ -34,6 +46,20 @@ test('calculateCanvasMetrics fits map into available canvas area', () => {
 test('tileColorForType returns distinct tactical colors', () => {
   assert.notEqual(tileColorForType('path'), tileColorForType('high'));
   assert.notEqual(tileColorForType('wall'), tileColorForType('path'));
+});
+
+test('forbidden deployment tile overlay uses a cross mark', () => {
+  assert.deepEqual(buildForbiddenTileOverlayModel({ x: 2, y: 1 }, {
+    tileSize: 40,
+    offsetX: 10,
+    offsetY: 20
+  }), {
+    fillRect: { x: 92, y: 62, width: 36, height: 36 },
+    lines: [
+      { from: { x: 98, y: 68 }, to: { x: 122, y: 92 } },
+      { from: { x: 122, y: 68 }, to: { x: 98, y: 92 } }
+    ]
+  });
 });
 
 test('buildEnemyHpBarModel exposes visible segments for phased enemies', () => {
@@ -68,6 +94,69 @@ test('buildEnemyHpBarModel exposes visible segments for phased enemies', () => {
   });
 });
 
+test('smoothDisplayedRatio eases displayed bars toward target ratio', () => {
+  assert.equal(smoothDisplayedRatio(0.2, 0.8, 0.25), 0.35);
+  assert.equal(smoothDisplayedRatio(0.8, 0.2, 0.25), 0.65);
+  assert.equal(smoothDisplayedRatio(undefined, 0.4, 0.25), 0.4);
+});
+
+test('buildBossHpBarModel selects active boss and detects phase refill animation', () => {
+  const boss = {
+    id: 'boss-1',
+    name: '测试首领',
+    boss: true,
+    hp: 500,
+    maxHp: 1000,
+    phaseIndex: 1,
+    phases: [{ maxHp: 800 }, { maxHp: 1000 }]
+  };
+  const model = buildBossHpBarModel([boss], [{
+    type: 'boss_bar',
+    elapsed: 0.2,
+    duration: 0.8,
+    payload: { bossId: 'boss-1', kind: 'phase_refill' }
+  }]);
+
+  assert.deepEqual(model, {
+    visible: true,
+    id: 'boss-1',
+    name: '测试首领',
+    hp: 500,
+    maxHp: 1000,
+    hpText: '500/1000',
+    ratio: 0.5,
+    phaseIndex: 1,
+    phaseCount: 2,
+    animation: 'phase_refill',
+    animationProgress: 0.25
+  });
+  assert.deepEqual(buildBossHpBarModel([], []), { visible: false });
+});
+
+test('buildFloatingTextLayout offsets stacked texts around the target', () => {
+  const base = buildFloatingTextLayout({
+    cell: { x: 1, y: 1 },
+    progress: 0,
+    stackIndex: 0,
+    tileSize: 40,
+    offsetX: 10,
+    offsetY: 20
+  });
+  const stacked = buildFloatingTextLayout({
+    cell: { x: 1, y: 1 },
+    progress: 0,
+    stackIndex: 1,
+    tileSize: 40,
+    offsetX: 10,
+    offsetY: 20
+  });
+
+  assert.notDeepEqual(stacked, base);
+  assert.equal(base.x, 70);
+  assert.equal(stacked.x < base.x, true);
+  assert.equal(stacked.y < base.y, true);
+});
+
 test('buildOperatorDeckModel marks unaffordable operators disabled', () => {
   const model = buildOperatorDeckModel({
     operatorCatalog: DEFAULT_OPERATORS,
@@ -97,12 +186,13 @@ test('buildOperatorDeckModel includes custom operators after default order', () 
     selectedOperatorType: 'custom-guard'
   });
 
-  assert.deepEqual(model.slice(0, 6).map((operator) => operator.id), [
+  assert.deepEqual(model.slice(0, 7).map((operator) => operator.id), [
     'vanguard',
     'guard',
     'defender',
     'sniper',
     'caster',
+    'specialist',
     'medic'
   ]);
   assert.equal(model.at(-1).id, 'custom-guard');
@@ -149,6 +239,45 @@ test('importMapJsonIntoList normalizes and appends imported map JSON', () => {
   assert.equal(result.map.version, '2.0');
   assert.equal(result.map.name, '导入地图');
   assert.equal(result.maps[0], initial[0]);
+});
+
+test('buildMapLibraryPanelModel marks selected and deletable map entries', () => {
+  const entries = [{
+    key: 'default:training-ground',
+    source: 'default',
+    deletable: false,
+    editable: true,
+    map: { id: 'training-ground', name: '新手训练场' }
+  }, {
+    key: 'custom:custom-a',
+    source: 'custom',
+    deletable: true,
+    editable: true,
+    map: { id: 'custom-a', name: '导入地图' }
+  }];
+
+  assert.deepEqual(buildMapLibraryPanelModel(entries, 1), [{
+    index: 0,
+    id: 'training-ground',
+    name: '新手训练场',
+    sourceLabel: '默认',
+    selected: false,
+    deletable: false,
+    editable: true
+  }, {
+    index: 1,
+    id: 'custom-a',
+    name: '导入地图',
+    sourceLabel: '导入',
+    selected: true,
+    deletable: true,
+    editable: true
+  }]);
+});
+
+test('editorLeaveWarningMessage only prompts when editor has unsaved changes', () => {
+  assert.equal(editorLeaveWarningMessage(false), '');
+  assert.equal(editorLeaveWarningMessage(true), '地图有未保存修改');
 });
 
 test('formatBattleTime renders minute and second clock', () => {
@@ -213,10 +342,142 @@ test('buildSkillPanelModel exposes all selected operator skills', () => {
   }]);
 });
 
+test('buildOperatorDisplayStats summarizes component attack values including active skill components', () => {
+  const stats = buildOperatorDisplayStats({
+    hp: 100,
+    maxHp: 200,
+    defense: 12,
+    resistance: 20,
+    attackInterval: 1.5,
+    block: 2,
+    blockedCount: 0,
+    normalAttack: {
+      components: [
+        { type: 'physical', value: 30 },
+        { type: 'arts', value: 20 }
+      ]
+    },
+    skills: [{
+      activeRemaining: 3,
+      components: [{ type: 'physical', value: 15 }]
+    }]
+  });
+
+  assert.equal(stats.attack, 65);
+  assert.equal(stats.attackSummary, '物理45 / 法术20');
+});
+
+test('buildOperatorDisplayStats uses modified base attack values for component totals', () => {
+  const stats = buildOperatorDisplayStats({
+    hp: 100,
+    maxHp: 100,
+    normalAttack: {
+      components: [
+        { type: 'physical', value: 40, attackMultiplier: 1.5, flatAttack: 10 },
+        { type: 'arts', value: 30, damageMultiplier: 2 }
+      ]
+    },
+    skills: []
+  });
+
+  assert.equal(stats.attack, 100);
+  assert.equal(stats.attackSummary, '物理70 / 法术30');
+});
+
+test('buildKeyboardShortcutGuideModel documents battle shortcuts', () => {
+  assert.deepEqual(buildKeyboardShortcutGuideModel().map((item) => item.key), [
+    'Space',
+    'S',
+    'Esc',
+    'R',
+    '1-9'
+  ]);
+});
+
+test('custom editor html exposes download and file import controls', () => {
+  const html = readFileSync(new URL('../custom-editor.html', import.meta.url), 'utf8');
+
+  assert.match(html, /id="custom-download-button"/);
+  assert.match(html, /id="custom-file-import-button"/);
+  assert.match(html, /id="custom-import-input"/);
+});
+
 test('custom editor input events avoid full form rerender to preserve focus', () => {
   assert.equal(fieldEditRenderMode({ eventType: 'input', tagName: 'INPUT' }), 'partial');
   assert.equal(fieldEditRenderMode({ eventType: 'change', tagName: 'INPUT' }), 'full');
   assert.equal(fieldEditRenderMode({ eventType: 'change', tagName: 'SELECT' }), 'full');
+});
+
+test('custom editor operator preview mirrors battle operator stats and updates with attack data', () => {
+  const state = {
+    selectedKind: 'operators',
+    selectedId: 'op-preview',
+    data: {
+      operators: {
+        'op-preview': {
+          id: 'op-preview',
+          name: '预览干员',
+          className: '术士',
+          hp: 180,
+          maxHp: 180,
+          defense: 24,
+          resistance: 15,
+          attackInterval: 1.6,
+          block: 1,
+          normalAttack: {
+            components: [
+              { type: 'physical', value: 50 },
+              { type: 'arts', value: 30 }
+            ]
+          },
+          skills: [{
+            id: 'burst',
+            name: '聚焦',
+            description: '测试技能。',
+            sp: 0,
+            spCost: 12,
+            activeRemaining: 0,
+            range: { type: 'pattern', cells: [{ x: 1, y: 0 }] }
+          }]
+        }
+      },
+      enemies: {}
+    }
+  };
+
+  const base = buildCustomOperatorPreviewModel(state);
+  const changed = buildCustomOperatorPreviewModel({
+    ...state,
+    data: {
+      ...state.data,
+      operators: {
+        'op-preview': {
+          ...state.data.operators['op-preview'],
+          normalAttack: {
+            components: [
+              { type: 'physical', value: 50, attackMultiplier: 1.5, flatAttack: 10 },
+              { type: 'arts', value: 30 }
+            ]
+          }
+        }
+      }
+    }
+  });
+
+  assert.equal(base.visible, true);
+  assert.equal(base.stats.attack, 80);
+  assert.equal(base.stats.attackSummary, '物理50 / 法术30');
+  assert.equal(base.skills.length, 1);
+  assert.equal(changed.stats.attack, 115);
+  assert.equal(changed.stats.attackSummary, '物理85 / 法术30');
+});
+
+test('custom editor operator preview hides for enemy templates', () => {
+  assert.deepEqual(buildCustomOperatorPreviewModel({
+    selectedKind: 'enemies',
+    selectedId: 'enemy',
+    data: { operators: {}, enemies: { enemy: { id: 'enemy', name: '敌人' } } }
+  }), { visible: false });
 });
 
 test('buildRenderKeys keeps interactive regions stable across frame-only changes', () => {
@@ -335,6 +596,50 @@ test('operator battlefield model exposes first skill sp ratio', () => {
   });
 });
 
+test('operator sp bar model shows active skill drain ratio', () => {
+  const model = buildOperatorSpBarModel({
+    skills: [{ sp: 0, spCost: 10, duration: 8, activeRemaining: 2 }]
+  });
+
+  assert.equal(model.visible, true);
+  assert.equal(model.ratio, 0.25);
+  assert.equal(model.mode, 'active');
+});
+
+test('operator sp bar model shows active ammo skill ratio', () => {
+  const model = buildOperatorSpBarModel({
+    skills: [{ sp: 0, spCost: 10, ammo: 5, ammoRemaining: 2 }]
+  });
+
+  assert.equal(model.visible, true);
+  assert.equal(model.ratio, 0.4);
+  assert.equal(model.ready, false);
+  assert.equal(model.mode, 'ammo');
+});
+
+test('skill panel model exposes ammo skill state', () => {
+  const model = buildSkillPanelModel({
+    skills: [{
+      id: 'loaded_rounds',
+      name: '装填弹药',
+      description: '接下来两次攻击追加法术伤害。',
+      sp: 0,
+      spCost: 10,
+      ammo: 2,
+      ammoRemaining: 1,
+      triggerMode: 'manual'
+    }]
+  });
+
+  assert.equal(model[0].ammo, 2);
+  assert.equal(model[0].ammoRemaining, 1);
+});
+
+test('operator neural bar model exposes neural ratio only when damaged', () => {
+  assert.deepEqual(buildOperatorNeuralBarModel({ neuralDamage: 0, neuralThreshold: 100 }), { visible: false, ratio: 0 });
+  assert.deepEqual(buildOperatorNeuralBarModel({ neuralDamage: 25, neuralThreshold: 100 }), { visible: true, ratio: 0.25 });
+});
+
 test('operator battlefield model hides non-positive skill sp cost', () => {
   const model = buildOperatorSpBarModel({
     skills: [{ id: 'skill', sp: 5, spCost: 0, triggerMode: 'manual' }]
@@ -433,6 +738,27 @@ test('enemy intel model summarizes range and traits', () => {
   assert.equal(model.name, '术式兵');
   assert.equal(model.rangeSummary, '菱形2');
   assert.deepEqual(model.traits, ['法术', '远程', '防阻挡2', '精英']);
+});
+
+test('enemy intel model includes components life value and block bypass', () => {
+  const model = buildEnemyIntelModel({
+    id: 'test',
+    name: 'Test',
+    maxHp: 100,
+    defense: 10,
+    resistance: 20,
+    speed: 1,
+    lifeValue: 8,
+    blockBypass: 3,
+    normalAttack: {
+      range: { type: 'diamond', radius: 2 },
+      components: [{ type: 'arts', value: 30 }]
+    }
+  });
+
+  assert.equal(model.lifeValue, 8);
+  assert.equal(model.blockBypass, 3);
+  assert.deepEqual(model.components, ['法术 30']);
 });
 
 test('enemy intel model defaults missing optional fields', () => {

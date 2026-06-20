@@ -1,5 +1,5 @@
 import { DEFAULT_OPERATORS } from '../data/defaultOperators.js';
-import { buildOperatorSpBarModel } from '../ui/OperatorViewModels.js';
+import { buildOperatorNeuralBarModel, buildOperatorSpBarModel } from '../ui/OperatorViewModels.js';
 import { hasReadyManualSkill } from '../systems/SkillSystem.js';
 import { gridToCenter, pixelToGrid } from '../utils/GridMath.js';
 import { rangeCellsFor as getRangeCellsFor } from '../utils/RangeMath.js';
@@ -38,6 +38,31 @@ export function tileColorForType(type) {
   return TILE_COLORS[type] ?? '#1a222b';
 }
 
+export function buildForbiddenTileOverlayModel(cell, { tileSize, offsetX, offsetY }) {
+  const px = offsetX + cell.x * tileSize;
+  const py = offsetY + cell.y * tileSize;
+  const fillInset = 2;
+  const crossInset = Math.max(6, tileSize * 0.2);
+  return {
+    fillRect: {
+      x: px + fillInset,
+      y: py + fillInset,
+      width: tileSize - fillInset * 2,
+      height: tileSize - fillInset * 2
+    },
+    lines: [
+      {
+        from: { x: px + crossInset, y: py + crossInset },
+        to: { x: px + tileSize - crossInset, y: py + tileSize - crossInset }
+      },
+      {
+        from: { x: px + tileSize - crossInset, y: py + crossInset },
+        to: { x: px + crossInset, y: py + tileSize - crossInset }
+      }
+    ]
+  };
+}
+
 export function buildEnemyHpBarModel(enemy) {
   const phaseCount = Array.isArray(enemy?.phases) && enemy.phases.length > 1 ? enemy.phases.length : 1;
   const phaseIndex = clampInteger(enemy?.phaseIndex, 0, phaseCount - 1);
@@ -59,11 +84,55 @@ export function buildEnemyHpBarModel(enemy) {
   return { bars };
 }
 
+export function smoothDisplayedRatio(current, target, factor = 0.22) {
+  if (!Number.isFinite(current)) {
+    return clampRatio(target);
+  }
+  const next = current + (clampRatio(target) - current) * factor;
+  return Math.round(clampRatio(next) * 1000) / 1000;
+}
+
+export function buildBossHpBarModel(enemies = [], effects = []) {
+  const boss = enemies.find((enemy) => enemy?.boss && !enemy.isDead && !enemy.reachedExit);
+  if (!boss) {
+    return { visible: false };
+  }
+  const animationEffect = effects.find((effect) => {
+    return effect.type === 'boss_bar' && effect.payload?.bossId === boss.id;
+  });
+  const phaseCount = Array.isArray(boss.phases) && boss.phases.length > 0 ? boss.phases.length : 1;
+  return {
+    visible: true,
+    id: boss.id,
+    name: boss.name,
+    hp: Math.ceil(boss.hp),
+    maxHp: Math.ceil(boss.maxHp),
+    hpText: `${Math.ceil(boss.hp)}/${Math.ceil(boss.maxHp)}`,
+    ratio: unitHpRatio(boss),
+    phaseIndex: clampInteger(boss.phaseIndex, 0, phaseCount - 1),
+    phaseCount,
+    animation: animationEffect?.payload?.kind ?? 'idle',
+    animationProgress: effectProgress(animationEffect)
+  };
+}
+
+export function buildFloatingTextLayout({ cell, progress, stackIndex = 0, tileSize, offsetX, offsetY }) {
+  const center = gridToCenter(cell, tileSize);
+  const lane = Number(stackIndex ?? 0);
+  const side = lane % 2 === 0 ? 1 : -1;
+  const spread = Math.ceil(lane / 2);
+  return {
+    x: offsetX + center.x + side * spread * tileSize * 0.24,
+    y: offsetY + center.y - tileSize * (0.25 + progress * 0.45 + lane * 0.1)
+  };
+}
+
 export class CanvasRenderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.metrics = null;
+    this.displayRatios = new Map();
   }
 
   render(state) {
@@ -76,6 +145,7 @@ export class CanvasRenderer {
     this.metrics = calculateCanvasMetrics(state.map, width, height);
     this.drawBackground(ctx, width, height);
     this.drawGrid(ctx, state);
+    this.drawMapOverlays(ctx, state);
     this.drawPaths(ctx, state);
     this.drawEffects(ctx, state);
     this.drawDeploymentPreview(ctx, state);
@@ -83,6 +153,7 @@ export class CanvasRenderer {
     this.drawDeploymentDirectionPrompt(ctx, state);
     this.drawOperators(ctx, state);
     this.drawEnemies(ctx, state);
+    this.drawBossHpBar(ctx, state, width);
     ctx.restore();
   }
 
@@ -141,6 +212,41 @@ export class CanvasRenderer {
     });
   }
 
+  drawMapOverlays(ctx, state) {
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    Object.entries(state.map.tileMeta ?? {}).forEach(([key, meta]) => {
+      if (meta.deployable !== false) {
+        return;
+      }
+      const [x, y] = key.split(',').map(Number);
+      const overlay = buildForbiddenTileOverlayModel({ x, y }, this.metrics);
+      ctx.save();
+      ctx.fillStyle = 'rgba(236, 87, 87, 0.18)';
+      ctx.fillRect(overlay.fillRect.x, overlay.fillRect.y, overlay.fillRect.width, overlay.fillRect.height);
+      ctx.strokeStyle = 'rgba(236, 87, 87, 0.72)';
+      ctx.lineWidth = Math.max(2, tileSize * 0.08);
+      ctx.lineCap = 'round';
+      overlay.lines.forEach((line) => {
+        ctx.beginPath();
+        ctx.moveTo(line.from.x, line.from.y);
+        ctx.lineTo(line.to.x, line.to.y);
+        ctx.stroke();
+      });
+      ctx.restore();
+    });
+
+    (state.map.paths ?? []).forEach((path) => {
+      const entry = path.entry ?? path.points?.[0];
+      const exit = path.exit ?? path.points?.[path.points.length - 1];
+      if (entry) {
+        this.drawTileBadge(ctx, entry, '#ec5757', 'IN');
+      }
+      if (exit) {
+        this.drawTileBadge(ctx, exit, '#5fc9ff', 'OUT');
+      }
+    });
+  }
+
   drawPaths(ctx, state) {
     const { tileSize, offsetX, offsetY } = this.metrics;
     state.map.paths.forEach((path) => {
@@ -160,6 +266,23 @@ export class CanvasRenderer {
       ctx.globalAlpha = 0.42;
       ctx.stroke();
       ctx.globalAlpha = 1;
+
+      (path.waypointActions ?? []).forEach((waypoint) => {
+        const point = path.points[waypoint.pointIndex];
+        if (!point) {
+          return;
+        }
+        const center = gridToCenter(point, tileSize);
+        ctx.save();
+        ctx.fillStyle = '#f6c445';
+        ctx.strokeStyle = '#10141b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(offsetX + center.x, offsetY + center.y, Math.max(5, tileSize * 0.12), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      });
     });
   }
 
@@ -174,8 +297,14 @@ export class CanvasRenderer {
       if (effect.type === 'operator_attack' || effect.type === 'enemy_attack') {
         this.drawAttackEffect(ctx, effect);
       }
+      if (effect.type === 'operator_heal') {
+        this.drawHealEffect(ctx, effect);
+      }
       if (effect.type === 'enemy_death') {
         this.drawDeathEffect(ctx, effect);
+      }
+      if (effect.type === 'floating_text') {
+        this.drawFloatingTextEffect(ctx, effect);
       }
     });
   }
@@ -257,6 +386,41 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
+  drawHealEffect(ctx, effect) {
+    const source = effect?.payload?.source;
+    const target = effect?.payload?.target;
+    if (!this.metrics || !isGridCell(source) || !isGridCell(target)) {
+      return;
+    }
+
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    const progress = effectProgress(effect);
+    const sourceCenter = gridToCenter(source, tileSize);
+    const targetCenter = gridToCenter(target, tileSize);
+    const sourceX = offsetX + sourceCenter.x;
+    const sourceY = offsetY + sourceCenter.y;
+    const targetX = offsetX + targetCenter.x;
+    const targetY = offsetY + targetCenter.y;
+    const color = effectColor(effect.payload?.color, '#72e0a6');
+    const pulse = Math.sin(progress * Math.PI);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.22 + pulse * 0.52;
+    ctx.lineWidth = Math.max(2, tileSize * 0.04);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(sourceX, sourceY);
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+    ctx.globalAlpha = 0.18 + pulse * 0.28;
+    ctx.beginPath();
+    ctx.arc(targetX, targetY, tileSize * (0.16 + pulse * 0.16), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   drawDeathEffect(ctx, effect) {
     const cell = effect?.payload?.cell;
     if (!this.metrics || !isGridCell(cell)) {
@@ -286,6 +450,40 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
+  drawFloatingTextEffect(ctx, effect) {
+    const cell = effect?.payload?.cell;
+    if (!this.metrics || !isGridCell(cell)) {
+      return;
+    }
+
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    const progress = effectProgress(effect);
+    const { x, y } = buildFloatingTextLayout({
+      cell,
+      progress,
+      stackIndex: effect.payload?.stackIndex ?? 0,
+      tileSize,
+      offsetX,
+      offsetY
+    });
+    const amount = Number(effect.payload?.amount ?? 0);
+    const kind = effect.payload?.kind ?? 'damage';
+    const color = kind === 'heal' ? '#72e0a6' : kind === 'neural' ? '#d87dff' : '#ec5757';
+    const sign = amount > 0 ? '+' : '';
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - progress * 0.85);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#061015';
+    ctx.lineWidth = 3;
+    ctx.font = `800 ${Math.max(12, tileSize * 0.22)}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeText(`${sign}${Math.round(amount)}`, x, y);
+    ctx.fillText(`${sign}${Math.round(amount)}`, x, y);
+    ctx.restore();
+  }
+
   drawDeploymentPreview(ctx, state) {
     if (!state.selectedOperatorType && !state.pendingDeployment) {
       return;
@@ -298,13 +496,18 @@ export class CanvasRenderer {
     }
 
     const { tileSize, offsetX, offsetY } = this.metrics;
-    const expectedType = template.deployType === 'ground' ? 'path' : 'high';
+    const expectedTypes = new Set(deployTerrainTypes(template));
     const occupied = new Set(state.operators.map((operator) => `${operator.cell.x},${operator.cell.y}`));
 
     state.map.grid.forEach((row, y) => {
       row.forEach((type, x) => {
-        const legal = type === expectedType && !occupied.has(`${x},${y}`) && state.cost >= template.cost;
-        if (type !== expectedType && type !== 'wall') {
+        const cell = { x, y };
+        const legal = expectedTypes.has(type)
+          && !occupied.has(`${x},${y}`)
+          && state.cost >= template.cost
+          && !isEntryOrExitCell(state.map, cell)
+          && state.map.tileMeta?.[cellKey(cell)]?.deployable !== false;
+        if (!expectedTypes.has(type) && type !== 'wall') {
           return;
         }
         if (type === 'wall') {
@@ -318,7 +521,7 @@ export class CanvasRenderer {
     const previewCell = state.pendingDeployment?.cell ?? state.hoverCell;
     const previewDirection = state.pendingDeployment?.direction ?? 'right';
     if (previewCell) {
-      this.drawRangeCells(ctx, previewCell, template.range, legalRangeColor(template.deployType), previewDirection);
+      this.drawRangeCells(ctx, previewCell, template.normalAttack?.range ?? template.range, legalRangeColor(template), previewDirection);
     }
   }
 
@@ -350,6 +553,11 @@ export class CanvasRenderer {
       ctx.fillText(operator.className.slice(0, 1), x, y);
 
       this.drawHpBar(ctx, operator, x - radius, y + radius + 4, radius * 2, 5);
+      const neuralBar = buildOperatorNeuralBarModel(operator);
+      if (neuralBar.visible) {
+        const neuralRatio = this.displayRatioFor(`${operator.id}:neural`, neuralBar.ratio);
+        this.drawRatioBar(ctx, x - radius, y - radius - 9, radius * 2, 4, neuralRatio, '#d87dff');
+      }
       const spBar = buildOperatorSpBarModel(operator);
       if (spBar.visible) {
         this.drawRatioBar(ctx, x - radius, y + radius + 11, radius * 2, 4, spBar.ratio, spBar.ready ? '#f6c445' : '#5fc9ff');
@@ -378,6 +586,13 @@ export class CanvasRenderer {
       ctx.strokeStyle = enemy.blockedBy ? '#ffffff' : '#10141b';
       ctx.lineWidth = enemy.blockedBy ? 2.5 : 1.5;
       ctx.stroke();
+      if (enemy.movementPauseRemaining > 0) {
+        ctx.fillStyle = '#f6c445';
+        ctx.font = `700 ${Math.max(10, tileSize * 0.18)}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('II', x, y - radius - Math.max(6, tileSize * 0.08));
+      }
 
       this.drawEnemyHpBars(ctx, enemy, x - radius, y + radius + 4, radius * 2, 4);
     });
@@ -386,7 +601,7 @@ export class CanvasRenderer {
   drawSelectedRange(ctx, state) {
     const selected = state.operators.find((operator) => operator.id === state.selectedOperatorId);
     if (selected) {
-      this.drawRangeCells(ctx, selected.cell, selected.range, 'rgba(246, 196, 69, 0.18)', selected.direction);
+      this.drawRangeCells(ctx, selected.cell, selected.normalAttack?.range ?? selected.range, 'rgba(246, 196, 69, 0.18)', selected.direction);
     }
   }
 
@@ -458,8 +673,25 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
+  drawTileBadge(ctx, cell, color, label) {
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    const px = offsetX + cell.x * tileSize;
+    const py = offsetY + cell.y * tileSize;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(px + 3, py + 3, tileSize - 6, tileSize - 6);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#061015';
+    ctx.font = `800 ${Math.max(8, tileSize * 0.12)}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, px + tileSize / 2, py + tileSize / 2);
+    ctx.restore();
+  }
+
   drawHpBar(ctx, unit, x, y, width, height) {
-    const hpRatio = unitHpRatio(unit);
+    const hpRatio = this.displayRatioFor(`${unit.id ?? unit.name}:hp`, unitHpRatio(unit));
     this.drawRatioBar(ctx, x, y, width, height, hpRatio, hpRatio > 0.45 ? '#72e0a6' : '#ec5757');
   }
 
@@ -470,8 +702,44 @@ export class CanvasRenderer {
 
     model.bars.forEach((bar, index) => {
       const barY = y + index * (barHeight + gap);
-      this.drawRatioBar(ctx, x, barY, width, barHeight, bar.ratio, enemyHpBarColor(bar));
+      const ratio = this.displayRatioFor(`${enemy.id}:phase:${bar.phaseIndex}`, bar.ratio);
+      this.drawRatioBar(ctx, x, barY, width, barHeight, ratio, enemyHpBarColor({ ...bar, ratio }));
     });
+  }
+
+  drawBossHpBar(ctx, state, canvasWidth) {
+    const model = buildBossHpBarModel(state.enemies, state.effects);
+    if (!model.visible) {
+      return;
+    }
+    const width = Math.min(canvasWidth * 0.58, 560);
+    const height = 20;
+    const x = (canvasWidth - width) / 2;
+    const enterOffset = model.animation === 'enter' ? (1 - model.animationProgress) * -34 : 0;
+    const y = Math.max(14, this.metrics.offsetY - 42) + enterOffset;
+    const ratio = model.animation === 'phase_refill'
+      ? Math.max(model.ratio, model.animationProgress)
+      : this.displayRatioFor(`${model.id}:boss`, model.ratio);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(6, 16, 21, 0.88)';
+    ctx.fillRect(x - 12, y - 12, width + 24, height + 34);
+    ctx.strokeStyle = '#ec5757';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 12, y - 12, width + 24, height + 34);
+    ctx.fillStyle = '#111821';
+    ctx.fillRect(x, y, width, height);
+    ctx.fillStyle = '#ec5757';
+    ctx.fillRect(x, y, width * clampRatio(ratio), height);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '800 13px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${model.name}  ${model.hpText}`, x + width / 2, y + height / 2);
+    ctx.fillStyle = '#f6c445';
+    ctx.font = '700 11px Inter, sans-serif';
+    ctx.fillText(`PHASE ${model.phaseIndex + 1}/${model.phaseCount}`, x + width / 2, y + height + 12);
+    ctx.restore();
   }
 
   drawRatioBar(ctx, x, y, width, height, ratio, color) {
@@ -493,10 +761,33 @@ export class CanvasRenderer {
     }
     return { width, height, ratio };
   }
+
+  displayRatioFor(key, target) {
+    const current = this.displayRatios.get(key);
+    const next = smoothDisplayedRatio(current, target);
+    this.displayRatios.set(key, next);
+    return next;
+  }
 }
 
-function legalRangeColor(deployType) {
-  return deployType === 'ground' ? 'rgba(246, 196, 69, 0.16)' : 'rgba(95, 201, 255, 0.16)';
+function legalRangeColor(template) {
+  const deployTypes = deployTypesForTemplate(template);
+  if (deployTypes.includes('ground') && deployTypes.includes('high')) {
+    return 'rgba(78, 208, 179, 0.16)';
+  }
+  return deployTypes[0] === 'ground' ? 'rgba(246, 196, 69, 0.16)' : 'rgba(95, 201, 255, 0.16)';
+}
+
+function deployTypesForTemplate(template) {
+  return Array.isArray(template.deployTypes) && template.deployTypes.length > 0
+    ? template.deployTypes
+    : [template.deployType];
+}
+
+function deployTerrainTypes(template) {
+  return deployTypesForTemplate(template)
+    .map((deployType) => deployType === 'ground' ? 'path' : (deployType === 'high' ? 'high' : null))
+    .filter(Boolean);
 }
 
 function directionVector(direction) {
@@ -519,6 +810,22 @@ function unitHpRatio(unit) {
     return 0;
   }
   return clampRatio(hp / maxHp);
+}
+
+function cellKey(cell) {
+  return `${cell.x},${cell.y}`;
+}
+
+function isEntryOrExitCell(map, cell) {
+  return (map.paths ?? []).some((path) => {
+    const entry = path.entry ?? path.points?.[0];
+    const exit = path.exit ?? path.points?.[path.points.length - 1];
+    return sameCell(entry, cell) || sameCell(exit, cell);
+  });
+}
+
+function sameCell(a, b) {
+  return a && b && a.x === b.x && a.y === b.y;
 }
 
 function clampRatio(value) {

@@ -57,6 +57,95 @@ test('operator and enemy templates normalize into gameplay-ready data', () => {
   assert.equal(enemy.elite, true);
 });
 
+test('operator validator migrates legacy attack fields into normalAttack', () => {
+  const operator = normalizeOperatorTemplate({
+    id: 'legacy-caster',
+    name: 'Legacy Caster',
+    class: 'caster',
+    className: '术士',
+    deployType: 'high',
+    cost: 16,
+    maxHp: 120,
+    attack: 50,
+    defense: 0,
+    resistance: 0.1,
+    attackInterval: 2,
+    block: 0,
+    damageType: 'arts',
+    range: { type: 'diamond', radius: 2 },
+    targeting: 'high-defense',
+    trait: 'legacy',
+    skills: [],
+    color: '#ffffff'
+  });
+
+  assert.equal(operator.resistance, 10);
+  assert.deepEqual(operator.normalAttack.components, [{ type: 'arts', value: 50 }]);
+  assert.equal(operator.normalAttack.interval, 2);
+});
+
+test('operator validator preserves specialist dual deploy terrain', () => {
+  const operator = normalizeOperatorTemplate({
+    id: 'dual-terrain-specialist',
+    name: 'Dual Terrain Specialist',
+    class: 'specialist',
+    className: '特种',
+    deployType: 'ground',
+    deployTypes: ['ground', 'high'],
+    cost: 11,
+    maxHp: 180,
+    attack: 24,
+    defense: 4,
+    resistance: 5,
+    attackInterval: 1.1,
+    block: 1,
+    damageType: 'physical',
+    range: { type: 'pattern', cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }] },
+    targeting: 'exit-first',
+    color: '#72e0a6'
+  });
+
+  assert.equal(operator.class, 'specialist');
+  assert.equal(operator.deployType, 'ground');
+  assert.deepEqual(operator.deployTypes, ['ground', 'high']);
+});
+
+test('enemy validator migrates legacy attack fields and defaults life value', () => {
+  const enemy = normalizeEnemyTemplate({
+    id: 'legacy-heavy',
+    name: 'Legacy Heavy',
+    maxHp: 180,
+    attack: 30,
+    defense: 12,
+    resistance: 0.2,
+    speed: 0.8,
+    attackInterval: 1.8,
+    canBeBlocked: true,
+    isFlying: false,
+    rewardCost: 5,
+    damageType: 'physical',
+    targeting: 'blocked-first',
+    range: { type: 'melee', radius: 0 },
+    color: '#ff0000'
+  });
+
+  assert.equal(enemy.resistance, 20);
+  assert.equal(enemy.lifeValue, 1);
+  assert.deepEqual(enemy.normalAttack.components, [{ type: 'physical', value: 30 }]);
+});
+
+test('default catalogs are authored with normal attacks and resistance percent values', () => {
+  assert.equal(DEFAULT_OPERATORS.defender.resistance, 5);
+  assert.deepEqual(DEFAULT_OPERATORS.caster.normalAttack.components, [{ type: 'arts', value: 58 }]);
+  assert.deepEqual(DEFAULT_OPERATORS.medic.normalAttack.effects, [{ type: 'heal', value: 32 }]);
+  assert.deepEqual(DEFAULT_OPERATORS.specialist.deployTypes, ['ground', 'high']);
+
+  assert.equal(DEFAULT_ENEMIES.heavy.resistance, 5);
+  assert.equal(DEFAULT_ENEMIES.infantry.lifeValue, 1);
+  assert.deepEqual(DEFAULT_ENEMIES.infantry.normalAttack.components, [{ type: 'physical', value: 12 }]);
+  assert.equal(DEFAULT_ENEMIES['crisis-avenger'].boss, true);
+});
+
 test('enemy templates normalize range damage bypass and phases', () => {
   const enemy = normalizeEnemyTemplate({
     id: 'caster-boss',
@@ -165,6 +254,26 @@ test('operator normalization migrates legacy skill into a three-skill list', () 
   assert.deepEqual(operator.skills[0].range.cells, [{ x: 0, y: 0 }, { x: 1, y: 0 }]);
 });
 
+test('operator skill normalization preserves ammo count for buff skills', () => {
+  const operator = normalizeOperatorTemplate({
+    ...DEFAULT_OPERATORS.sniper,
+    id: 'ammo-sniper',
+    skills: [{
+      id: 'loaded_rounds',
+      name: '装填弹药',
+      description: '接下来两次攻击追加法术伤害。',
+      spCost: 10,
+      triggerMode: 'manual',
+      type: 'buff',
+      ammo: '2',
+      components: [{ type: 'arts', value: 30 }],
+      effects: []
+    }]
+  });
+
+  assert.equal(operator.skills[0].ammo, 2);
+});
+
 test('operator validation rejects more than three skills', () => {
   const result = validateOperatorTemplate({
     ...DEFAULT_OPERATORS.sniper,
@@ -210,6 +319,10 @@ test('custom catalogs save, load, validate, and merge with defaults', () => {
         ...DEFAULT_OPERATORS.sniper,
         name: '覆盖速射手',
         attack: 99,
+        normalAttack: {
+          ...DEFAULT_OPERATORS.sniper.normalAttack,
+          components: [{ type: 'physical', value: 99 }]
+        },
         range: { type: 'pattern', cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }] }
       }
     },

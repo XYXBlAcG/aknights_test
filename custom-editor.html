@@ -15,6 +15,9 @@
           <button id="custom-save-button">保存</button>
           <button id="custom-export-button">导出</button>
           <button id="custom-import-button">导入</button>
+          <button id="custom-download-button">下载 JSON</button>
+          <button id="custom-file-import-button">选择 JSON 导入</button>
+          <input id="custom-import-input" class="hidden-file-input" type="file" accept="application/json,.json" />
         </nav>
       </header>
 
@@ -39,6 +42,7 @@
         </section>
 
         <aside class="editor-panel custom-side-panel">
+          <section id="custom-operator-preview-panel" class="operator-preview-panel info-panel"></section>
           <section id="custom-range-panel"></section>
           <section class="editor-json-panel">
             <h2>JSON</h2>

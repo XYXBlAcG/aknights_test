@@ -89,6 +89,21 @@ test('blocking clears existing blocks whose bypass exceeds operator block', () =
   assert.equal(vanguard.blockedEnemies.length, 0);
 });
 
+test('medic normal healing can target injured high tile operators', () => {
+  const medic = new Operator(DEFAULT_OPERATORS.medic, { x: 1, y: 1 });
+  const sniper = new Operator(DEFAULT_OPERATORS.sniper, { x: 2, y: 1 });
+  sniper.hp = 40;
+
+  const result = createCombatSystem().tick(0.1, {
+    operators: [medic, sniper],
+    enemies: []
+  });
+
+  assert.equal(sniper.hp, 72);
+  assert.equal(result.healedOperators[0], sniper);
+  assert.deepEqual(result.healingEvents[0], { source: medic, target: sniper, amount: 32 });
+});
+
 test('enemy runtime applies first phase stats when phases are present', () => {
   const enemy = new Enemy({
     ...DEFAULT_ENEMIES.heavy,
@@ -207,6 +222,135 @@ test('enemy runtime clears blocker when advancing into unblockable phase', () =>
 
   assert.equal(enemy.canBeBlocked, false);
   assert.equal(enemy.blockedBy, null);
+});
+
+test('operator normal attack applies physical and arts components', () => {
+  const operator = new Operator({
+    ...DEFAULT_OPERATORS.sniper,
+    id: 'component-sniper',
+    normalAttack: {
+      interval: 0.1,
+      range: { type: 'diamond', radius: 3 },
+      targeting: 'exit-first',
+      components: [
+        { type: 'physical', value: 50 },
+        { type: 'arts', value: 40 }
+      ],
+      effects: []
+    }
+  }, { x: 0, y: 0 });
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.heavy,
+    id: 'component-target',
+    maxHp: 200,
+    defense: 20,
+    resistance: 50
+  }, { pathId: 'main' });
+  enemy.cell = { x: 1, y: 0 };
+  enemy.pathDistance = 1;
+
+  createCombatSystem().tick(0.2, { operators: [operator], enemies: [enemy] });
+
+  assert.equal(enemy.hp, 150);
+});
+
+test('active skill components are added to each normal attack during duration', () => {
+  const operator = new Operator({
+    ...DEFAULT_OPERATORS.sniper,
+    id: 'component-skill-sniper',
+    attack: 0,
+    normalAttack: {
+      interval: 0.1,
+      range: { type: 'diamond', radius: 3 },
+      targeting: 'exit-first',
+      components: [{ id: 'base-hit', type: 'physical', value: 20 }],
+      effects: []
+    },
+    skills: [{
+      id: 'loaded_rounds',
+      name: '装填术弹',
+      spCost: 1,
+      triggerMode: 'manual',
+      type: 'buff',
+      duration: 5,
+      activeRemaining: 5,
+      components: [{ id: 'skill-hit', type: 'arts', value: 30 }],
+      effects: []
+    }]
+  }, { x: 0, y: 0 });
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.infantry,
+    id: 'component-skill-target',
+    maxHp: 120,
+    defense: 5,
+    resistance: 0
+  }, { pathId: 'main' });
+  enemy.cell = { x: 1, y: 0 };
+  enemy.pathDistance = 1;
+
+  createCombatSystem().tick(0.2, { operators: [operator], enemies: [enemy] });
+
+  assert.equal(enemy.hp, 75);
+});
+
+test('operator attacks restore skill sp when configured', () => {
+  const operator = new Operator({
+    ...DEFAULT_OPERATORS.sniper,
+    id: 'sp-attack-sniper',
+    spOnAttack: 2,
+    normalAttack: {
+      interval: 0.1,
+      range: { type: 'diamond', radius: 3 },
+      targeting: 'exit-first',
+      components: [{ id: 'base-hit', type: 'physical', value: 20 }],
+      effects: []
+    },
+    skills: [{
+      id: 'attack_charge',
+      name: '攻击充能',
+      spCost: 5,
+      triggerMode: 'manual',
+      type: 'buff',
+      duration: 3,
+      sp: 0,
+      activeRemaining: 0,
+      components: [],
+      effects: []
+    }]
+  }, { x: 0, y: 0 });
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.infantry,
+    id: 'sp-target',
+    maxHp: 120,
+    defense: 0
+  }, { pathId: 'main' });
+  enemy.cell = { x: 1, y: 0 };
+  enemy.pathDistance = 1;
+
+  createCombatSystem().tick(0.2, { operators: [operator], enemies: [enemy] });
+
+  assert.equal(operator.skills[0].sp, 2);
+});
+
+test('enemy ranged normal attack applies neural component to operator', () => {
+  const enemy = new Enemy({
+    ...DEFAULT_ENEMIES.infantry,
+    id: 'neural-ranged',
+    normalAttack: {
+      interval: 0.1,
+      range: { type: 'diamond', radius: 2 },
+      targeting: 'nearest',
+      components: [{ type: 'neural', value: 60 }],
+      effects: []
+    }
+  }, { pathId: 'main' });
+  const operator = new Operator(DEFAULT_OPERATORS.defender, { x: 1, y: 0 });
+  enemy.cell = { x: 0, y: 0 };
+
+  createCombatSystem().tick(0.2, { operators: [operator], enemies: [enemy] });
+
+  assert.equal(operator.neuralDamage, 60);
+  assert.equal(operator.hp, operator.maxHp);
 });
 
 test('combat system lets ranged operators damage enemies in range', () => {

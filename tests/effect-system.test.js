@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  createBossBarEffect,
   createEffectSystem,
   createEnemyDeathEffect,
+  createFloatingTextEffect,
   createOperatorAttackEffect,
   createWaveWarningEffect
 } from '../src/systems/EffectSystem.js';
@@ -47,6 +49,34 @@ test('wave warning effect carries path and enemy payload', () => {
     wave: 2,
     count: 5,
     startTime: 12
+  });
+});
+
+test('floating text and boss bar effects carry combat feedback payloads', () => {
+  const floating = createFloatingTextEffect({
+    cell: { x: 2, y: 1 },
+    amount: -45,
+    kind: 'damage',
+    stackIndex: 2
+  });
+  const boss = createBossBarEffect({
+    bossId: 'boss-1',
+    kind: 'phase_refill'
+  });
+
+  assert.equal(floating.type, 'floating_text');
+  assert.equal(floating.duration, 0.9);
+  assert.deepEqual(floating.payload, {
+    cell: { x: 2, y: 1 },
+    amount: -45,
+    kind: 'damage',
+    stackIndex: 2
+  });
+  assert.equal(boss.type, 'boss_bar');
+  assert.equal(boss.duration, 0.8);
+  assert.deepEqual(boss.payload, {
+    bossId: 'boss-1',
+    kind: 'phase_refill'
   });
 });
 

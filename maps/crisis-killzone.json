@@ -1,0 +1,130 @@
+{
+  "version": "2.0",
+  "id": "crisis-killzone",
+  "name": "危机封锁区",
+  "description": "高难度测试地图：双路线、远程压力、阻挡穿透和Boss两阶段。",
+  "width": 12,
+  "height": 8,
+  "initialCost": 28,
+  "maxCost": 35,
+  "maxLives": 10,
+  "deployLimit": 6,
+  "totalWaves": 5,
+  "grid": [
+    ["wall", "high", "high", "wall", "high", "high", "wall", "high", "high", "wall", "wall", "wall"],
+    ["path", "path", "path", "path", "path", "path", "path", "high", "high", "wall", "high", "wall"],
+    ["wall", "high", "wall", "wall", "high", "wall", "path", "wall", "high", "high", "wall", "wall"],
+    ["wall", "high", "high", "wall", "high", "wall", "path", "wall", "high", "wall", "wall", "wall"],
+    ["path", "path", "path", "path", "path", "path", "path", "path", "path", "path", "path", "path"],
+    ["wall", "wall", "high", "wall", "high", "wall", "path", "wall", "high", "high", "wall", "wall"],
+    ["wall", "high", "high", "wall", "wall", "wall", "path", "high", "high", "wall", "wall", "wall"],
+    ["wall", "wall", "wall", "wall", "wall", "wall", "path", "wall", "wall", "wall", "wall", "wall"]
+  ],
+  "tileMeta": {
+    "5,4": { "deployable": false },
+    "6,4": { "deployable": false }
+  },
+  "paths": [
+    {
+      "id": "main",
+      "name": "封锁主线",
+      "entry": { "x": 0, "y": 1 },
+      "exit": { "x": 6, "y": 7 },
+      "points": [
+        { "x": 0, "y": 1 },
+        { "x": 1, "y": 1 },
+        { "x": 2, "y": 1 },
+        { "x": 3, "y": 1 },
+        { "x": 4, "y": 1 },
+        { "x": 5, "y": 1 },
+        { "x": 6, "y": 1 },
+        { "x": 6, "y": 2 },
+        { "x": 6, "y": 3 },
+        { "x": 6, "y": 4 },
+        { "x": 6, "y": 5 },
+        { "x": 6, "y": 6 },
+        { "x": 6, "y": 7 }
+      ],
+      "color": "#ff5c73",
+      "lifeDamage": 1,
+      "waypointActions": [
+        {
+          "id": "central-fortify",
+          "pointIndex": 9,
+          "oncePerEnemy": true,
+          "actions": [
+            { "type": "pause", "duration": 1.2 },
+            {
+              "type": "add_defense_module",
+              "module": {
+                "id": "contract-plating",
+                "duration": 6,
+                "defenseDelta": 20,
+                "resistanceDelta": 15
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flank",
+      "name": "侧翼突破线",
+      "entry": { "x": 0, "y": 4 },
+      "exit": { "x": 11, "y": 4 },
+      "points": [
+        { "x": 0, "y": 4 },
+        { "x": 1, "y": 4 },
+        { "x": 2, "y": 4 },
+        { "x": 3, "y": 4 },
+        { "x": 4, "y": 4 },
+        { "x": 5, "y": 4 },
+        { "x": 6, "y": 4 },
+        { "x": 7, "y": 4 },
+        { "x": 8, "y": 4 },
+        { "x": 9, "y": 4 },
+        { "x": 10, "y": 4 },
+        { "x": 11, "y": 4 }
+      ],
+      "color": "#b98cff",
+      "lifeDamage": 1,
+      "waypointActions": [
+        {
+          "id": "flank-overwatch",
+          "pointIndex": 6,
+          "oncePerEnemy": true,
+          "actions": [
+            {
+              "type": "add_attack_module",
+              "module": {
+                "id": "flank-pulse",
+                "duration": 5,
+                "normalAttack": {
+                  "interval": 1.6,
+                  "range": { "type": "diamond", "radius": 2 },
+                  "targeting": "nearest",
+                  "components": [
+                    { "type": "arts", "value": 24 },
+                    { "type": "neural", "value": 20 }
+                  ],
+                  "effects": []
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    { "wave": 1, "startTime": 2, "enemyType": "infantry", "count": 8, "interval": 0.7, "pathId": "main" },
+    { "wave": 1, "startTime": 6, "enemyType": "drone", "count": 3, "interval": 1.1, "pathId": "flank" },
+    { "wave": 2, "startTime": 18, "enemyType": "heavy", "count": 5, "interval": 1.4, "pathId": "main" },
+    { "wave": 2, "startTime": 22, "enemyType": "neural-caster", "count": 3, "interval": 1.8, "pathId": "flank" },
+    { "wave": 3, "startTime": 38, "enemyType": "block-breacher", "count": 4, "interval": 2.0, "pathId": "main" },
+    { "wave": 3, "startTime": 44, "enemyType": "phase-breaker", "count": 2, "interval": 3.0, "pathId": "flank" },
+    { "wave": 4, "startTime": 64, "enemyType": "crisis-avenger", "count": 1, "interval": 1.0, "pathId": "main" },
+    { "wave": 5, "startTime": 78, "enemyType": "phase-breaker", "count": 2, "interval": 2.8, "pathId": "main" },
+    { "wave": 5, "startTime": 84, "enemyType": "crisis-avenger", "count": 1, "interval": 1.0, "pathId": "flank" }
+  ]
+}

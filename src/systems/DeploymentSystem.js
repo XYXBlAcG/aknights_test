@@ -33,10 +33,18 @@ export class DeploymentSystem {
       return { ok: false, reason: 'Cell is outside the map' };
     }
 
-    const requiredTerrain = TERRAIN_BY_DEPLOY_TYPE[template.deployType];
+    const requiredTerrain = deployTerrainTypes(template);
     const terrain = getCellType(this.map, cell);
-    if (terrain !== requiredTerrain) {
-      return { ok: false, reason: `${template.name} requires ${requiredTerrain} terrain` };
+    if (!requiredTerrain.includes(terrain)) {
+      return { ok: false, reason: `${template.name} requires ${requiredTerrain.join('/')} terrain` };
+    }
+
+    if (isEntryOrExitCell(this.map, cell)) {
+      return { ok: false, reason: 'Entry and exit cells cannot be deployed on' };
+    }
+
+    if (!isTileDeployable(this.map, cell)) {
+      return { ok: false, reason: 'This tile forbids deployment' };
     }
 
     if (this.getOperatorAt(cell)) {
@@ -62,7 +70,11 @@ export class DeploymentSystem {
       return { ok: false, reason: 'Not enough cost' };
     }
 
-    return { ok: true, template };
+    return {
+      ok: true,
+      template,
+      deployType: deployTypeForTerrain(template, terrain)
+    };
   }
 
   deploy(operatorType, cell, direction = 'right') {
@@ -72,7 +84,10 @@ export class DeploymentSystem {
     }
 
     this.costSystem.spend(check.template.cost);
-    const operator = new Operator(check.template, cell, direction);
+    const operator = new Operator({
+      ...check.template,
+      deployType: check.deployType
+    }, cell, direction);
     this.operators.push(operator);
     return { ok: true, operator };
   }
@@ -95,6 +110,25 @@ export class DeploymentSystem {
     return { ok: true, operator };
   }
 
+  removeKilledOperators() {
+    const killed = this.operators.filter((operator) => operator.isDead);
+    if (killed.length === 0) {
+      return [];
+    }
+
+    killed.forEach((operator) => {
+      operator.blockedEnemies.forEach((enemy) => {
+        if (enemy.blockedBy === operator.id) {
+          enemy.blockedBy = null;
+        }
+      });
+      operator.blockedEnemies = [];
+      this.redeployCooldowns[operator.templateId] = this.redeployCooldownSeconds;
+    });
+    this.operators = this.operators.filter((operator) => !operator.isDead);
+    return killed;
+  }
+
   tickCooldowns(deltaSeconds) {
     Object.entries(this.redeployCooldowns).forEach(([templateId, remaining]) => {
       const next = Math.max(0, remaining - deltaSeconds);
@@ -114,4 +148,34 @@ export class DeploymentSystem {
     this.operators = [];
     this.redeployCooldowns = {};
   }
+}
+
+function deployTypesForTemplate(template) {
+  return Array.isArray(template.deployTypes) && template.deployTypes.length > 0
+    ? template.deployTypes
+    : [template.deployType];
+}
+
+function deployTerrainTypes(template) {
+  return deployTypesForTemplate(template)
+    .map((deployType) => TERRAIN_BY_DEPLOY_TYPE[deployType])
+    .filter(Boolean);
+}
+
+function deployTypeForTerrain(template, terrain) {
+  const deployType = deployTypesForTemplate(template).find((type) => TERRAIN_BY_DEPLOY_TYPE[type] === terrain);
+  return deployType ?? template.deployType;
+}
+
+function isEntryOrExitCell(map, cell) {
+  return (map.paths ?? []).some((path) => {
+    const entry = path.entry ?? path.points?.[0];
+    const exit = path.exit ?? path.points?.[path.points.length - 1];
+    return (entry && isSameCell(entry, cell)) || (exit && isSameCell(exit, cell));
+  });
+}
+
+function isTileDeployable(map, cell) {
+  const key = `${cell.x},${cell.y}`;
+  return map.tileMeta?.[key]?.deployable !== false;
 }

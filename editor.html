@@ -12,6 +12,7 @@
         <nav class="editor-nav">
           <a href="/">返回战斗</a>
           <a href="/custom-editor.html">自定义编辑器</a>
+          <button id="editor-save-library-button">保存到地图库</button>
           <button id="editor-export-button">导出</button>
           <button id="editor-import-button">导入</button>
           <button id="editor-download-button">下载 JSON</button>
@@ -26,6 +27,8 @@
               <button data-terrain="path">路径</button>
               <button data-terrain="high">高台</button>
               <button data-terrain="wall">障碍</button>
+              <button data-deployability="true">允许部署</button>
+              <button data-deployability="false">禁止部署</button>
             </div>
           </section>
 
@@ -55,6 +58,11 @@
               <button id="add-path-button">新增路径</button>
               <button id="remove-path-point-button">删除末点</button>
             </div>
+          </section>
+
+          <section class="editor-panel">
+            <h2>路径节点动作</h2>
+            <div id="waypoint-action-panel" class="waypoint-action-panel"></div>
           </section>
 
           <section class="editor-panel">

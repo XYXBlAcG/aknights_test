@@ -1,6 +1,7 @@
 import {
   addPath,
   addTimelineEvent,
+  addWaypointAction,
   buildTimelinePreviewModel,
   cellsInRect,
   createEditorState,
@@ -10,14 +11,18 @@ import {
   removeLastPointFromSelectedPath,
   removePath,
   removeTimelineEvent,
+  removeWaypointAction,
   resizeMap,
   selectPath,
+  setCellsDeployable,
   toMapJson,
   updateMapMeta,
   updatePath,
-  updateTimelineEvent
+  updateTimelineEvent,
+  updateWaypointAction
 } from './EditorModel.js';
 import { DEFAULT_ENEMIES } from '../data/defaultEnemies.js';
+import { saveCustomMapToLibrary } from '../data/MapLibraryStore.js';
 
 const TERRAIN_LABELS = {
   path: '路径',
@@ -25,13 +30,26 @@ const TERRAIN_LABELS = {
   wall: '障碍'
 };
 
+const DEPLOYABILITY_LABELS = {
+  true: '允许部署',
+  false: '禁止部署'
+};
+
+const WAYPOINT_ACTION_LABELS = {
+  pause: '停顿',
+  add_attack_module: '攻击模块',
+  add_defense_module: '防御模块'
+};
+
 export class EditorController {
-  constructor({ root, canvas, renderer, enemyCatalog = DEFAULT_ENEMIES }) {
+  constructor({ root, canvas, renderer, enemyCatalog = DEFAULT_ENEMIES, initialState = null, storage = globalThis.localStorage }) {
     this.root = root;
     this.canvas = canvas;
     this.renderer = renderer;
     this.enemyCatalog = enemyCatalog;
-    this.state = createEditorState({ width: 10, height: 6, name: '新地图' });
+    this.storage = storage;
+    this.state = initialState ?? createEditorState({ width: 10, height: 6, name: '新地图' });
+    this.isDirty = false;
     this.hoverCell = null;
     this.previewCells = [];
     this.isPainting = false;
@@ -39,6 +57,7 @@ export class EditorController {
     this.dragStartCell = null;
     this.paintedCellKeys = new Set();
     this.selectedTerrain = 'path';
+    this.selectedDeployability = null;
     this.cacheElements();
     this.bindEvents();
     this.sync();
@@ -55,6 +74,7 @@ export class EditorController {
     this.maxLivesInput = this.root.querySelector('#max-lives-input');
     this.totalWavesInput = this.root.querySelector('#total-waves-input');
     this.pathList = this.root.querySelector('#path-list');
+    this.waypointActionPanel = this.root.querySelector('#waypoint-action-panel');
     this.timelinePreview = this.root.querySelector('#timeline-preview');
     this.timelineList = this.root.querySelector('#timeline-list');
     this.jsonTextarea = this.root.querySelector('#json-textarea');
@@ -66,16 +86,23 @@ export class EditorController {
     this.exportButton = this.root.querySelector('#editor-export-button');
     this.importButton = this.root.querySelector('#editor-import-button');
     this.downloadButton = this.root.querySelector('#editor-download-button');
+    this.saveLibraryButton = this.root.querySelector('#editor-save-library-button');
   }
 
   bindEvents() {
     this.terrainTools.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-terrain]');
-      if (!button) {
+      const terrainButton = event.target.closest('[data-terrain]');
+      const deployabilityButton = event.target.closest('[data-deployability]');
+      if (terrainButton) {
+        this.selectedTerrain = terrainButton.dataset.terrain;
+        this.selectedDeployability = null;
+        this.sync();
         return;
       }
-      this.selectedTerrain = button.dataset.terrain;
-      this.sync();
+      if (deployabilityButton) {
+        this.selectedDeployability = deployabilityButton.dataset.deployability === 'true';
+        this.sync();
+      }
     });
 
     [
@@ -89,6 +116,7 @@ export class EditorController {
       input.addEventListener('change', () => {
         const value = type === 'number' ? Number(input.value) : input.value;
         this.state = updateMapMeta(this.state, { [key]: value });
+        this.isDirty = true;
         this.sync();
       });
     });
@@ -107,6 +135,7 @@ export class EditorController {
 
     this.addPathButton.addEventListener('click', () => {
       this.state = addPath(this.state, `路径 ${this.state.map.paths.length + 1}`);
+      this.isDirty = true;
       this.sync('已新增路径。点击路径格添加路径点。');
     });
 
@@ -123,6 +152,7 @@ export class EditorController {
       }
       if (removeButton) {
         this.state = removePath(this.state, removeButton.dataset.removePath);
+        this.isDirty = true;
         this.sync('已删除路径');
       }
     });
@@ -135,11 +165,53 @@ export class EditorController {
       this.state = updatePath(this.state, input.dataset.pathId, {
         [input.dataset.pathField]: input.value
       });
+      this.isDirty = true;
       this.sync();
+    });
+
+    this.waypointActionPanel.addEventListener('click', (event) => {
+      const addButton = event.target.closest('[data-add-waypoint-action]');
+      const removeButton = event.target.closest('[data-remove-waypoint-action]');
+      if (addButton) {
+        const pathId = addButton.dataset.pathId;
+        const path = this.state.map.paths.find((item) => item.id === pathId);
+        const pointIndex = firstIntermediatePointIndex(path);
+        this.runMutation(() => addWaypointAction(
+          this.state,
+          pathId,
+          pointIndex,
+          defaultWaypointAction(addButton.dataset.addWaypointAction)
+        ), '已新增路径节点动作');
+        return;
+      }
+      if (removeButton) {
+        this.runMutation(() => removeWaypointAction(
+          this.state,
+          removeButton.dataset.pathId,
+          removeButton.dataset.removeWaypointAction
+        ), '已删除路径节点动作');
+      }
+    });
+
+    this.waypointActionPanel.addEventListener('change', (event) => {
+      const input = event.target.closest('[data-waypoint-field]');
+      if (!input) {
+        return;
+      }
+      const pathId = input.dataset.pathId;
+      const actionId = input.dataset.actionId;
+      const field = input.dataset.waypointField;
+      this.runMutation(() => updateWaypointAction(
+        this.state,
+        pathId,
+        actionId,
+        buildWaypointActionPatch(this.state, pathId, actionId, field, input.value)
+      ), '路径节点动作已更新');
     });
 
     this.addEventButton.addEventListener('click', () => {
       this.state = addTimelineEvent(this.state);
+      this.isDirty = true;
       this.sync('已新增出怪事件');
     });
 
@@ -149,6 +221,7 @@ export class EditorController {
         return;
       }
       this.state = removeTimelineEvent(this.state, button.dataset.removeEvent);
+      this.isDirty = true;
       this.sync('已删除出怪事件');
     });
 
@@ -160,6 +233,7 @@ export class EditorController {
       this.state = updateTimelineEvent(this.state, input.dataset.eventId, {
         [input.dataset.eventField]: input.value
       });
+      this.isDirty = true;
       this.sync();
     });
 
@@ -168,11 +242,11 @@ export class EditorController {
         const map = toMapJson(this.state);
         this.jsonTextarea.value = `${JSON.stringify(map, null, 2)}\n`;
         return this.state;
-      }, 'JSON 已导出');
+      }, 'JSON 已导出', { dirty: false });
     });
 
     this.importButton.addEventListener('click', () => {
-      this.runMutation(() => loadMapIntoEditor(JSON.parse(this.jsonTextarea.value)), 'JSON 已导入');
+      this.runMutation(() => loadMapIntoEditor(JSON.parse(this.jsonTextarea.value)), 'JSON 已导入', { dirty: false });
     });
 
     this.downloadButton.addEventListener('click', () => {
@@ -186,7 +260,15 @@ export class EditorController {
         link.click();
         URL.revokeObjectURL(url);
         return this.state;
-      }, '已生成下载');
+      }, '已生成下载', { dirty: false });
+    });
+
+    this.saveLibraryButton?.addEventListener('click', () => {
+      this.runMutation(() => {
+        const map = toMapJson(this.state);
+        saveCustomMapToLibrary(map, this.storage);
+        return this.state;
+      }, '已保存到地图库', { dirty: false });
     });
 
     this.canvas.addEventListener('pointerdown', (event) => {
@@ -232,7 +314,7 @@ export class EditorController {
         const cells = this.previewCells;
         this.previewCells = [];
         this.isPainting = false;
-        this.runMutation(() => paintCells(this.state, cells, this.selectedTerrain, { appendPathPoints: true }), `${TERRAIN_LABELS[this.selectedTerrain]} ${cells.length} 格`);
+        this.runMutation(() => this.applySelectedBrush(cells), `${this.selectedBrushLabel()} ${cells.length} 格`);
         return;
       }
       this.isPainting = false;
@@ -246,6 +328,16 @@ export class EditorController {
         this.renderer.render(this.state, this.hoverCell, this.previewCells);
       }
     });
+
+    window.addEventListener('beforeunload', (event) => {
+      const message = editorLeaveWarningMessage(this.isDirty);
+      if (!message) {
+        return undefined;
+      }
+      event.preventDefault();
+      event.returnValue = message;
+      return message;
+    });
   }
 
   paintCellOnce(cell) {
@@ -254,12 +346,27 @@ export class EditorController {
       return;
     }
     this.paintedCellKeys.add(key);
-    this.runMutation(() => paintCells(this.state, [cell], this.selectedTerrain, { appendPathPoints: true }), `${TERRAIN_LABELS[this.selectedTerrain]} ${cell.x},${cell.y}`);
+    this.runMutation(() => this.applySelectedBrush([cell]), `${this.selectedBrushLabel()} ${cell.x},${cell.y}`);
   }
 
-  runMutation(mutator, successMessage) {
+  applySelectedBrush(cells) {
+    if (this.selectedDeployability !== null) {
+      return setCellsDeployable(this.state, cells, this.selectedDeployability);
+    }
+    return paintCells(this.state, cells, this.selectedTerrain, { appendPathPoints: true });
+  }
+
+  selectedBrushLabel() {
+    if (this.selectedDeployability !== null) {
+      return DEPLOYABILITY_LABELS[String(this.selectedDeployability)];
+    }
+    return TERRAIN_LABELS[this.selectedTerrain];
+  }
+
+  runMutation(mutator, successMessage, options = { dirty: true }) {
     try {
       this.state = mutator();
+      this.isDirty = options.dirty !== false;
       this.sync(successMessage);
     } catch (error) {
       this.sync(error.message);
@@ -270,6 +377,7 @@ export class EditorController {
     this.syncMetaInputs();
     this.renderTerrainTools();
     this.renderPathList();
+    this.renderWaypointActionPanel();
     this.renderTimelinePreview();
     this.renderTimelineList();
     this.renderValidation(message);
@@ -289,7 +397,10 @@ export class EditorController {
 
   renderTerrainTools() {
     this.terrainTools.querySelectorAll('[data-terrain]').forEach((button) => {
-      button.classList.toggle('selected', button.dataset.terrain === this.selectedTerrain);
+      button.classList.toggle('selected', this.selectedDeployability === null && button.dataset.terrain === this.selectedTerrain);
+    });
+    this.terrainTools.querySelectorAll('[data-deployability]').forEach((button) => {
+      button.classList.toggle('selected', this.selectedDeployability === (button.dataset.deployability === 'true'));
     });
   }
 
@@ -308,6 +419,34 @@ export class EditorController {
         <button data-remove-path="${path.id}">删除</button>
       </article>
     `).join('');
+  }
+
+  renderWaypointActionPanel() {
+    if (!this.waypointActionPanel) {
+      return;
+    }
+    const path = this.state.map.paths.find((item) => item.id === this.state.selectedPathId);
+    if (!path) {
+      this.waypointActionPanel.innerHTML = '<p class="muted">先选择一条路径。</p>';
+      return;
+    }
+    const intermediatePoints = path.points.slice(1, -1);
+    if (intermediatePoints.length === 0) {
+      this.waypointActionPanel.innerHTML = '<p class="muted">路径至少需要 3 个点才能设置中间节点动作。</p>';
+      return;
+    }
+
+    this.waypointActionPanel.innerHTML = `
+      <div class="waypoint-actions-toolbar">
+        <button data-path-id="${path.id}" data-add-waypoint-action="pause">添加停顿</button>
+        <button data-path-id="${path.id}" data-add-waypoint-action="add_attack_module">添加攻击模块</button>
+        <button data-path-id="${path.id}" data-add-waypoint-action="add_defense_module">添加防御模块</button>
+      </div>
+      <div class="waypoint-action-list">
+        ${(path.waypointActions ?? []).length === 0 ? '<p class="muted">暂无节点动作。</p>' : ''}
+        ${(path.waypointActions ?? []).map((waypoint) => renderWaypointActionRow(path, waypoint)).join('')}
+      </div>
+    `;
   }
 
   renderTimelineList() {
@@ -393,6 +532,10 @@ export class EditorController {
   }
 }
 
+export function editorLeaveWarningMessage(isDirty) {
+  return isDirty ? '地图有未保存修改' : '';
+}
+
 export function buildEnemyOptionsModel({ enemyCatalog, selectedEnemyType = null }) {
   const options = Object.values(enemyCatalog)
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -425,6 +568,184 @@ function pathColorForEvent(state, event) {
 
 function shortEventLabel(event) {
   return `${event.enemyType.slice(0, 2)} x${event.count}`;
+}
+
+function firstIntermediatePointIndex(path) {
+  if (!path || path.points.length < 3) {
+    throw new Error('路径至少需要 3 个点才能设置中间节点动作');
+  }
+  return 1;
+}
+
+function defaultWaypointAction(type) {
+  if (type === 'add_attack_module') {
+    return {
+      type,
+      module: {
+        id: 'route-overwatch',
+        duration: 6,
+        normalAttack: {
+          interval: 1.5,
+          targeting: 'nearest',
+          range: { type: 'diamond', radius: 2 },
+          components: [{ type: 'arts', value: 30 }],
+          effects: []
+        }
+      }
+    };
+  }
+  if (type === 'add_defense_module') {
+    return {
+      type,
+      module: {
+        id: 'route-armor',
+        duration: 6,
+        defenseDelta: 20,
+        resistanceDelta: 15
+      }
+    };
+  }
+  return {
+    type: 'pause',
+    duration: 2
+  };
+}
+
+function buildWaypointActionPatch(state, pathId, actionId, field, value) {
+  if (field === 'pointIndex') {
+    return { pointIndex: Number(value) };
+  }
+  if (field === 'type') {
+    return { action: defaultWaypointAction(value) };
+  }
+
+  const path = state.map.paths.find((item) => item.id === pathId);
+  const waypoint = path?.waypointActions?.find((item) => item.id === actionId);
+  const action = structuredClone(waypoint?.actions?.[0] ?? defaultWaypointAction('pause'));
+
+  if (field === 'duration') {
+    if (action.type === 'pause') {
+      action.duration = Number(value);
+    } else {
+      action.module ??= {};
+      action.module.duration = Number(value);
+    }
+  }
+
+  if (action.type === 'add_attack_module') {
+    action.module ??= {};
+    action.module.normalAttack ??= {};
+    action.module.normalAttack.range ??= { type: 'diamond', radius: 2 };
+    action.module.normalAttack.components ??= [{ type: 'arts', value: 30 }];
+    if (field === 'attackInterval') {
+      action.module.normalAttack.interval = Number(value);
+    }
+    if (field === 'rangeRadius') {
+      action.module.normalAttack.range = {
+        type: 'diamond',
+        radius: Number(value)
+      };
+    }
+    if (field === 'attackType') {
+      action.module.normalAttack.components[0] = {
+        ...action.module.normalAttack.components[0],
+        type: value
+      };
+    }
+    if (field === 'attackValue') {
+      action.module.normalAttack.components[0] = {
+        ...action.module.normalAttack.components[0],
+        value: Number(value)
+      };
+    }
+  }
+
+  if (action.type === 'add_defense_module') {
+    action.module ??= {};
+    if (field === 'defenseDelta') {
+      action.module.defenseDelta = Number(value);
+    }
+    if (field === 'resistanceDelta') {
+      action.module.resistanceDelta = Number(value);
+    }
+  }
+
+  return { action };
+}
+
+function renderWaypointActionRow(path, waypoint) {
+  const action = waypoint.actions?.[0] ?? defaultWaypointAction('pause');
+  return `
+    <article class="waypoint-action-row">
+      <label>节点
+        <select data-path-id="${path.id}" data-action-id="${waypoint.id}" data-waypoint-field="pointIndex">
+          ${path.points.slice(1, -1).map((point, offset) => {
+            const index = offset + 1;
+            return `<option value="${index}" ${Number(waypoint.pointIndex) === index ? 'selected' : ''}>#${index + 1} (${point.x},${point.y})</option>`;
+          }).join('')}
+        </select>
+      </label>
+      <label>类型
+        <select data-path-id="${path.id}" data-action-id="${waypoint.id}" data-waypoint-field="type">
+          ${Object.entries(WAYPOINT_ACTION_LABELS).map(([type, label]) => `
+            <option value="${type}" ${action.type === type ? 'selected' : ''}>${label}</option>
+          `).join('')}
+        </select>
+      </label>
+      ${renderWaypointActionFields(path.id, waypoint.id, action)}
+      <button data-path-id="${path.id}" data-remove-waypoint-action="${waypoint.id}">删除</button>
+    </article>
+  `;
+}
+
+function renderWaypointActionFields(pathId, actionId, action) {
+  if (action.type === 'pause') {
+    return `
+      <label>停顿秒数
+        <input data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="duration" type="number" step="0.1" min="0" value="${Number(action.duration ?? 2)}" />
+      </label>
+    `;
+  }
+
+  if (action.type === 'add_attack_module') {
+    const module = action.module ?? {};
+    const normalAttack = module.normalAttack ?? {};
+    const component = normalAttack.components?.[0] ?? { type: 'arts', value: 30 };
+    return `
+      <label>持续秒数
+        <input data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="duration" type="number" step="0.1" min="0" value="${Number(module.duration ?? module.remaining ?? 6)}" />
+      </label>
+      <label>伤害类型
+        <select data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="attackType">
+          <option value="physical" ${component.type === 'physical' ? 'selected' : ''}>物理</option>
+          <option value="arts" ${component.type === 'arts' ? 'selected' : ''}>法术</option>
+          <option value="neural" ${component.type === 'neural' ? 'selected' : ''}>神经</option>
+        </select>
+      </label>
+      <label>伤害值
+        <input data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="attackValue" type="number" min="0" value="${Number(component.value ?? 30)}" />
+      </label>
+      <label>攻击间隔
+        <input data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="attackInterval" type="number" step="0.1" min="0.1" value="${Number(normalAttack.interval ?? 1.5)}" />
+      </label>
+      <label>范围半径
+        <input data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="rangeRadius" type="number" step="0.5" min="0" value="${Number(normalAttack.range?.radius ?? 2)}" />
+      </label>
+    `;
+  }
+
+  const module = action.module ?? {};
+  return `
+    <label>持续秒数
+      <input data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="duration" type="number" step="0.1" min="0" value="${Number(module.duration ?? module.remaining ?? 6)}" />
+    </label>
+    <label>防御增量
+      <input data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="defenseDelta" type="number" value="${Number(module.defenseDelta ?? 20)}" />
+    </label>
+    <label>法抗增量
+      <input data-path-id="${pathId}" data-action-id="${actionId}" data-waypoint-field="resistanceDelta" type="number" value="${Number(module.resistanceDelta ?? 15)}" />
+    </label>
+  `;
 }
 
 function escapeHtml(value) {

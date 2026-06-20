@@ -1,6 +1,7 @@
 import { getCellType, isCellInBounds } from '../utils/GridMath.js';
 
 const VALID_CELL_TYPES = new Set(['path', 'high', 'wall']);
+const WAYPOINT_ACTION_TYPES = new Set(['pause', 'add_attack_module', 'add_defense_module']);
 const cache = new Map();
 
 export function normalizeMap(rawMap) {
@@ -12,6 +13,7 @@ export function normalizeMap(rawMap) {
   if (version === '2.0') {
     const normalized = {
       ...rawMap,
+      tileMeta: normalizeTileMeta(rawMap.tileMeta),
       paths: rawMap.paths?.map(normalizePath) ?? [],
       timeline: rawMap.timeline?.map(normalizeTimelineEvent) ?? []
     };
@@ -27,6 +29,7 @@ export function normalizeMap(rawMap) {
   const normalized = {
     ...rawMap,
     version: '2.0',
+    tileMeta: normalizeTileMeta(rawMap.tileMeta),
     paths: [{
       id: 'main',
       name: '主通道',
@@ -34,7 +37,8 @@ export function normalizeMap(rawMap) {
       exit: legacyPath[legacyPath.length - 1],
       points: legacyPath,
       color: '#f6c445',
-      lifeDamage: 1
+      lifeDamage: 1,
+      waypointActions: []
     }],
     timeline: (rawMap.timeline ?? []).map((event) => normalizeTimelineEvent({
       ...event,
@@ -77,6 +81,16 @@ export function validateMap(map) {
     });
   });
 
+  Object.entries(map.tileMeta ?? {}).forEach(([key, meta]) => {
+    const [x, y] = key.split(',').map(Number);
+    if (!Number.isInteger(x) || !Number.isInteger(y) || !isCellInBounds({ x, y }, map.width, map.height)) {
+      throw new Error(`Map ${map.id} tileMeta key ${key} is outside grid`);
+    }
+    if (meta.deployable !== undefined && typeof meta.deployable !== 'boolean') {
+      throw new Error(`Map ${map.id} tileMeta ${key}.deployable must be boolean`);
+    }
+  });
+
   if (!Array.isArray(map.paths) || map.paths.length === 0) {
     throw new Error(`Map ${map.id} must define at least one path`);
   }
@@ -102,6 +116,20 @@ export function validateMap(map) {
       if (getCellType(map, point) !== 'path') {
         throw new Error(`Path ${path.id} point ${point.x},${point.y} must be on path terrain`);
       }
+    });
+
+    (path.waypointActions ?? []).forEach((entry) => {
+      if (!Number.isInteger(entry.pointIndex) || entry.pointIndex <= 0 || entry.pointIndex >= path.points.length - 1) {
+        throw new Error(`Path ${path.id} waypoint action ${entry.id} must target an intermediate point`);
+      }
+      if (!Array.isArray(entry.actions) || entry.actions.length === 0) {
+        throw new Error(`Path ${path.id} waypoint action ${entry.id} actions must be a non-empty array`);
+      }
+      entry.actions.forEach((action) => {
+        if (!WAYPOINT_ACTION_TYPES.has(action.type)) {
+          throw new Error(`Path ${path.id} waypoint action type must be one of ${[...WAYPOINT_ACTION_TYPES].join(', ')}`);
+        }
+      });
     });
   });
 
@@ -156,7 +184,8 @@ function normalizePath(path) {
     ...path,
     entry: path.entry ?? points[0],
     exit: path.exit ?? points[points.length - 1],
-    points
+    points,
+    waypointActions: normalizeWaypointActions(path.waypointActions)
   };
 }
 
@@ -165,6 +194,52 @@ function normalizeTimelineEvent(event) {
     interval: 0.8,
     ...event
   };
+}
+
+function normalizeTileMeta(tileMeta) {
+  if (!tileMeta) {
+    return {};
+  }
+  return Object.fromEntries(Object.entries(tileMeta).map(([key, meta]) => [key, {
+    deployable: meta?.deployable === undefined ? true : Boolean(meta.deployable)
+  }]));
+}
+
+function normalizeWaypointActions(waypointActions) {
+  if (!waypointActions) {
+    return [];
+  }
+  if (!Array.isArray(waypointActions)) {
+    throw new Error('path waypointActions must be an array');
+  }
+  return waypointActions.map((entry, index) => ({
+    id: entry.id ?? `waypoint-action-${index + 1}`,
+    pointIndex: Number(entry.pointIndex),
+    oncePerEnemy: entry.oncePerEnemy !== false,
+    actions: (entry.actions ?? []).map(normalizeWaypointAction)
+  }));
+}
+
+function normalizeWaypointAction(action) {
+  if (action.type === 'pause') {
+    return {
+      type: 'pause',
+      duration: Number(action.duration ?? 0)
+    };
+  }
+  if (action.type === 'add_attack_module') {
+    return {
+      type: 'add_attack_module',
+      module: structuredClone(action.module ?? {})
+    };
+  }
+  if (action.type === 'add_defense_module') {
+    return {
+      type: 'add_defense_module',
+      module: structuredClone(action.module ?? {})
+    };
+  }
+  return { type: action.type };
 }
 
 function requiredString(target, key, prefix = 'map') {

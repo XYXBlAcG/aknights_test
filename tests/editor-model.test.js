@@ -4,6 +4,7 @@ import {
   addPath,
   addPointToSelectedPath,
   addTimelineEvent,
+  addWaypointAction,
   buildTimelinePreviewModel,
   cellsInRect,
   createEditorState,
@@ -14,6 +15,7 @@ import {
   removeTimelineEvent,
   resizeMap,
   selectPath,
+  setCellsDeployable,
   setCellType,
   toMapJson,
   updateTimelineEvent
@@ -96,6 +98,17 @@ test('painting over path terrain removes path points on overwritten cells', () =
   assert.deepEqual(next.map.paths[0].points, [{ x: 0, y: 0 }, { x: 2, y: 0 }]);
   assert.deepEqual(next.map.paths[0].entry, { x: 0, y: 0 });
   assert.deepEqual(next.map.paths[0].exit, { x: 2, y: 0 });
+});
+
+test('editor toggles deployability metadata for multiple path cells', () => {
+  let state = createEditorState({ width: 3, height: 1 });
+  state = paintCells(state, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }], 'path');
+  state = setCellsDeployable(state, [{ x: 1, y: 0 }], false);
+
+  assert.deepEqual(state.map.tileMeta, { '1,0': { deployable: false } });
+
+  const restored = setCellsDeployable(state, [{ x: 1, y: 0 }], true);
+  assert.deepEqual(restored.map.tileMeta, {});
 });
 
 test('resizeMap expands with walls and crops out-of-bounds path points', () => {
@@ -188,6 +201,18 @@ test('toMapJson exports a validateMap-compatible v2 map', () => {
   assert.equal(map.name, '可导出地图');
   assert.equal(map.timeline.length, 1);
   assert.equal(validation.ok, true);
+});
+
+test('editor exports waypoint actions only on intermediate path points', () => {
+  let state = createEditorState({ width: 3, height: 1 });
+  state = addPath(state, 'main');
+  state = paintCells(state, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }], 'path', { appendPathPoints: true });
+  state = addWaypointAction(state, state.selectedPathId, 1, { type: 'pause', duration: 2 });
+  const map = toMapJson(state);
+
+  assert.equal(map.paths[0].waypointActions[0].pointIndex, 1);
+  assert.equal(map.paths[0].waypointActions[0].actions[0].duration, 2);
+  assert.throws(() => addWaypointAction(state, state.selectedPathId, 0, { type: 'pause', duration: 1 }), /intermediate/);
 });
 
 test('loadMapIntoEditor normalizes imported v1 maps', () => {

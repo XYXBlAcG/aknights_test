@@ -8,15 +8,18 @@ import { createCombatSystem } from '../systems/CombatSystem.js';
 import { createCostSystem } from '../systems/CostSystem.js';
 import { createDeploymentSystem } from '../systems/DeploymentSystem.js';
 import {
+  createBossBarEffect,
   createEnemyAttackEffect,
   createEnemyDeathEffect,
   createEffectSystem,
+  createFloatingTextEffect,
   createOperatorAttackEffect,
+  createOperatorHealEffect,
   createWaveWarningEffect
 } from '../systems/EffectSystem.js';
 import { createWaveSystem } from '../systems/WaveSystem.js';
 import { evaluateBattleResult } from '../systems/WinLoseSystem.js';
-import { activateOperatorSkill, tickOperatorSkills } from '../systems/SkillSystem.js';
+import { activateOperatorSkill, tickEnemySkills, tickOperatorSkills } from '../systems/SkillSystem.js';
 import { pathLength, pathPositionAtDistance } from '../utils/GridMath.js';
 
 const SPEEDS = [0.5, 1, 1.5, 2, 3, 4, 5];
@@ -60,6 +63,7 @@ export class Game {
     this.blockingSystem = createBlockingSystem();
     this.combatSystem = createCombatSystem();
     this.effectSystem = createEffectSystem();
+    this.floatingTextStacks = new Map();
     this.warnedWaveEvents = new Set();
     this.seenEnemyTypes = new Set();
     this.enemyIntelQueue = [];
@@ -186,10 +190,13 @@ export class Game {
       return { ok: false, reason: `Operator ${operatorId} is not deployed` };
     }
 
-    return activateOperatorSkill(operator, {
-      costSystem: this.costSystem,
-      operators: this.deploymentSystem.operators
-    }, skillId);
+    const skillEvents = [];
+    const result = activateOperatorSkill(operator, this.operatorSkillContext(skillEvents), skillId);
+    this.addOperatorSkillEffects(skillEvents);
+    if (result.ok) {
+      this.enemies = this.enemies.filter((enemy) => !enemy.isDead && !enemy.reachedExit);
+    }
+    return result;
   }
 
   getOperatorAt(cell) {
@@ -224,17 +231,31 @@ export class Game {
       this.placeEnemyAtPathDistance(enemy, 0);
       this.enemies.push(enemy);
       this.queueEnemyIntel(enemy.templateId);
+      if (enemy.boss) {
+        this.effectSystem.add(createBossBarEffect({ bossId: enemy.id, kind: 'enter' }));
+      }
     });
 
     this.costSystem.tick(scaledDelta, this.deploymentSystem.operators);
     this.deploymentSystem.tickCooldowns(scaledDelta);
-    tickOperatorSkills(scaledDelta, this.deploymentSystem.operators, {
-      costSystem: this.costSystem,
-      operators: this.deploymentSystem.operators
-    });
+    const operatorSkillEvents = [];
+    tickOperatorSkills(scaledDelta, this.deploymentSystem.operators, this.operatorSkillContext(operatorSkillEvents));
+    this.addOperatorSkillEffects(operatorSkillEvents);
+    this.enemies = this.enemies.filter((enemy) => !enemy.isDead && !enemy.reachedExit);
     this.blockingSystem.clearInvalidBlocks(this.deploymentSystem.operators, this.enemies);
     this.moveEnemies(scaledDelta);
     this.blockingSystem.update(this.deploymentSystem.operators, this.enemies);
+    const enemySkillEvents = [];
+    tickEnemySkills(scaledDelta, this.enemies, this.deploymentSystem.operators, {
+      onEnemySkill: (event) => enemySkillEvents.push(event)
+    });
+    enemySkillEvents.forEach((event) => {
+      this.effectSystem.add(createEnemyAttackEffect({
+        source: event.source.cell,
+        target: event.target.cell,
+        color: event.source.color
+      }));
+    });
 
     const combatResult = this.combatSystem.tick(scaledDelta, {
       operators: this.deploymentSystem.operators,
@@ -244,7 +265,7 @@ export class Game {
     this.addCombatEffects(combatResult);
 
     this.enemies = this.enemies.filter((enemy) => !enemy.isDead && !enemy.reachedExit);
-    this.deploymentSystem.operators = this.deploymentSystem.operators.filter((operator) => !operator.isDead);
+    this.deploymentSystem.removeKilledOperators();
     if (this.selectedOperatorId && !this.deploymentSystem.operators.some((operator) => operator.id === this.selectedOperatorId)) {
       this.clearSelection();
     }
@@ -268,6 +289,20 @@ export class Game {
         color: attack.source.color
       }));
     });
+    result.healingEvents?.forEach((event) => {
+      this.effectSystem.add(createOperatorHealEffect({
+        source: event.source.cell,
+        target: event.target.cell,
+        color: event.source.color
+      }));
+      this.addFloatingText(event.target, event.amount, 'heal');
+    });
+    result.damageEvents?.forEach((event) => {
+      this.addFloatingText(event.target, -event.amount, 'damage');
+    });
+    result.neuralEvents?.forEach((event) => {
+      this.addFloatingText(event.target, event.amount, 'neural');
+    });
     result.killedEnemies?.forEach((enemy) => {
       this.effectSystem.add(createEnemyDeathEffect({
         cell: enemy.cell,
@@ -281,7 +316,70 @@ export class Game {
         color: enemy.color,
         phaseBreak: true
       }));
+      if (enemy.boss) {
+        this.effectSystem.add(createBossBarEffect({ bossId: enemy.id, kind: 'phase_refill' }));
+      }
     });
+  }
+
+  operatorSkillContext(events) {
+    return {
+      costSystem: this.costSystem,
+      operators: this.deploymentSystem.operators,
+      enemies: this.enemies,
+      onEnemyKilled: (enemy) => this.handleEnemyKilled(enemy),
+      onOperatorSkillEvent: (event) => events.push(event)
+    };
+  }
+
+  addOperatorSkillEffects(events) {
+    events.forEach((event) => {
+      if (event.type === 'operator_attack') {
+        this.effectSystem.add(createOperatorAttackEffect({
+          source: event.source.cell,
+          target: event.target.cell,
+          color: event.source.color
+        }));
+        this.addFloatingText(event.target, -event.result.hpDamage, 'damage');
+        if (event.result.neuralDamage > 0) {
+          this.addFloatingText(event.target, event.result.neuralDamage, 'neural');
+        }
+      }
+      if (event.type === 'operator_heal') {
+        this.effectSystem.add(createOperatorHealEffect({
+          source: event.source.cell,
+          target: event.target.cell,
+          color: event.source.color
+        }));
+        this.addFloatingText(event.target, event.result.healing, 'heal');
+      }
+      if (event.type === 'enemy_death' || event.type === 'enemy_phase_break') {
+        this.effectSystem.add(createEnemyDeathEffect({
+          cell: event.target.cell,
+          color: event.target.color,
+          phaseBreak: event.type === 'enemy_phase_break'
+        }));
+        if (event.target.boss && event.type === 'enemy_phase_break') {
+          this.effectSystem.add(createBossBarEffect({ bossId: event.target.id, kind: 'phase_refill' }));
+        }
+      }
+    });
+  }
+
+  addFloatingText(target, amount, kind) {
+    const rounded = Math.round(Number(amount ?? 0));
+    if (!target?.cell || rounded === 0) {
+      return;
+    }
+    const stackKey = `${target.id ?? `${target.cell.x},${target.cell.y}`}:${Math.floor(this.elapsed * 4)}`;
+    const stackIndex = this.floatingTextStacks.get(stackKey) ?? 0;
+    this.floatingTextStacks.set(stackKey, stackIndex + 1);
+    this.effectSystem.add(createFloatingTextEffect({
+      cell: target.cell,
+      amount: rounded,
+      kind,
+      stackIndex
+    }));
   }
 
   getState() {
@@ -369,7 +467,11 @@ export class Game {
 
   moveEnemies(deltaSeconds) {
     this.enemies.forEach((enemy) => {
-      if (enemy.isDead || enemy.reachedExit || enemy.blockedBy) {
+      if (enemy.isDead || enemy.reachedExit) {
+        return;
+      }
+      tickEnemyModules(enemy, deltaSeconds);
+      if (enemy.blockedBy) {
         return;
       }
 
@@ -378,17 +480,50 @@ export class Game {
         throw new Error(`Enemy ${enemy.id} references missing path ${enemy.pathId}`);
       }
 
-      enemy.pathDistance += enemy.speed * deltaSeconds;
+      let movementDelta = deltaSeconds;
+      if (enemy.movementPauseRemaining > 0) {
+        const pauseConsumed = Math.min(enemy.movementPauseRemaining, movementDelta);
+        enemy.movementPauseRemaining = Math.max(0, enemy.movementPauseRemaining - pauseConsumed);
+        movementDelta -= pauseConsumed;
+      }
+
+      if (movementDelta <= 0) {
+        return;
+      }
+
+      const previousDistance = enemy.pathDistance;
+      const nextDistance = enemy.pathDistance + enemy.speed * movementDelta;
+      const waypointDistance = this.applyWaypointActions(enemy, path, previousDistance, nextDistance);
+      enemy.pathDistance = waypointDistance ?? nextDistance;
       if (enemy.pathDistance >= path.length) {
         this.placeEnemyAtPathDistance(enemy, path.length);
         enemy.reachedExit = true;
         this.leaks += 1;
-        this.lives = Math.max(0, this.lives - (path.lifeDamage ?? 1));
+        this.lives = Math.max(0, this.lives - (enemy.lifeValue ?? path.lifeDamage ?? 1));
         return;
       }
 
       this.placeEnemyAtPathDistance(enemy, enemy.pathDistance);
     });
+  }
+
+  applyWaypointActions(enemy, path, previousDistance, nextDistance) {
+    const waypointDistances = distancesAtPathPoints(path.points);
+    for (const waypoint of path.waypointActions ?? []) {
+      const actionDistance = waypointDistances[waypoint.pointIndex];
+      if (!Number.isFinite(actionDistance) || previousDistance >= actionDistance || nextDistance < actionDistance) {
+        continue;
+      }
+      if (waypoint.oncePerEnemy !== false && enemy.triggeredWaypointActionIds.has(waypoint.id)) {
+        continue;
+      }
+      enemy.triggeredWaypointActionIds.add(waypoint.id);
+      applyWaypointActionGroup(enemy, waypoint.actions);
+      if (enemy.movementPauseRemaining > 0) {
+        return actionDistance;
+      }
+    }
+    return null;
   }
 
   placeEnemyAtPathDistance(enemy, distance) {
@@ -429,4 +564,48 @@ export class Game {
 
 function displaySeconds(value, fallback) {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function distancesAtPathPoints(points) {
+  const distances = [0];
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const segmentLength = Math.abs(current.x - previous.x) + Math.abs(current.y - previous.y);
+    distances[index] = distances[index - 1] + segmentLength;
+  }
+  return distances;
+}
+
+function applyWaypointActionGroup(enemy, actions = []) {
+  actions.forEach((action) => {
+    if (action.type === 'pause') {
+      enemy.movementPauseRemaining = Math.max(enemy.movementPauseRemaining ?? 0, Number(action.duration ?? 0));
+    }
+    if (action.type === 'add_attack_module') {
+      enemy.attackModules.push(normalizeTimedModule(action.module));
+    }
+    if (action.type === 'add_defense_module') {
+      enemy.defenseModules.push(normalizeTimedModule(action.module));
+    }
+  });
+}
+
+function normalizeTimedModule(module = {}) {
+  const duration = Number(module.duration ?? module.remaining ?? 0);
+  return {
+    ...structuredClone(module),
+    remaining: Number.isFinite(duration) ? duration : 0
+  };
+}
+
+function tickEnemyModules(enemy, deltaSeconds) {
+  enemy.attackModules = tickModuleList(enemy.attackModules, deltaSeconds);
+  enemy.defenseModules = tickModuleList(enemy.defenseModules, deltaSeconds);
+}
+
+function tickModuleList(modules = [], deltaSeconds) {
+  return modules
+    .map((module) => ({ ...module, remaining: Number(module.remaining ?? 0) - deltaSeconds }))
+    .filter((module) => module.remaining > 0);
 }

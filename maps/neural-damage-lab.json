@@ -1,0 +1,47 @@
+{
+  "version": "2.0",
+  "id": "neural-damage-lab",
+  "name": "神经损伤实验场",
+  "description": "测试远程敌人、混合伤害组件和神经损伤条。",
+  "width": 10,
+  "height": 6,
+  "initialCost": 24,
+  "maxCost": 30,
+  "maxLives": 10,
+  "totalWaves": 3,
+  "grid": [
+    ["wall", "high", "high", "wall", "wall", "high", "high", "wall", "wall", "wall"],
+    ["wall", "high", "wall", "wall", "high", "wall", "wall", "high", "high", "wall"],
+    ["wall", "wall", "wall", "high", "high", "wall", "high", "wall", "wall", "wall"],
+    ["path", "path", "path", "path", "path", "path", "path", "path", "path", "path"],
+    ["wall", "high", "wall", "wall", "high", "wall", "wall", "high", "wall", "wall"],
+    ["wall", "wall", "wall", "wall", "wall", "high", "high", "wall", "wall", "wall"]
+  ],
+  "paths": [
+    {
+      "id": "main",
+      "name": "实验通道",
+      "entry": { "x": 0, "y": 3 },
+      "exit": { "x": 9, "y": 3 },
+      "points": [
+        { "x": 0, "y": 3 },
+        { "x": 1, "y": 3 },
+        { "x": 2, "y": 3 },
+        { "x": 3, "y": 3 },
+        { "x": 4, "y": 3 },
+        { "x": 5, "y": 3 },
+        { "x": 6, "y": 3 },
+        { "x": 7, "y": 3 },
+        { "x": 8, "y": 3 },
+        { "x": 9, "y": 3 }
+      ],
+      "color": "#b98cff",
+      "lifeDamage": 1
+    }
+  ],
+  "timeline": [
+    { "wave": 1, "startTime": 2, "enemyType": "infantry", "count": 5, "interval": 0.9, "pathId": "main" },
+    { "wave": 2, "startTime": 16, "enemyType": "neural-caster", "count": 4, "interval": 1.6, "pathId": "main" },
+    { "wave": 3, "startTime": 34, "enemyType": "phase-breaker", "count": 2, "interval": 3.0, "pathId": "main" }
+  ]
+}

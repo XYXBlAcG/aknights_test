@@ -2,8 +2,25 @@ import { CLASS_LIMITS, DEFAULT_OPERATOR_ORDER, TOTAL_DEPLOY_LIMIT } from '../dat
 import { Game } from '../core/Game.js';
 import { GameLoop } from '../core/GameLoop.js';
 import { normalizeMap } from '../data/MapLoader.js';
+import {
+  buildMapLibrary,
+  deleteCustomMapFromLibrary,
+  saveCustomMapToLibrary,
+  storeEditorDraftMap
+} from '../data/MapLibraryStore.js';
+import {
+  buildOperatorDisplayStats,
+  buildOperatorNeuralBarModel,
+  buildOperatorSpBarModel,
+  buildSkillPanelModel
+} from './OperatorViewModels.js';
 
-export { buildOperatorSpBarModel } from './OperatorViewModels.js';
+export {
+  buildOperatorDisplayStats,
+  buildOperatorNeuralBarModel,
+  buildOperatorSpBarModel,
+  buildSkillPanelModel
+} from './OperatorViewModels.js';
 
 export function formatBattleTime(seconds) {
   const totalSeconds = Math.floor(seconds);
@@ -77,30 +94,37 @@ export function importMapJsonIntoList(maps, jsonText) {
   };
 }
 
-export function buildSkillPanelModel(operator) {
-  const skills = operator?.skills ?? [operator?.skill].filter(Boolean);
-  return skills.map((skill) => ({
-    id: skill.id,
-    name: skill.name,
-    description: skill.description,
-    sp: Math.floor(skill.sp),
-    spCost: skill.spCost,
-    ready: skill.sp >= skill.spCost,
-    activeRemaining: Math.ceil(skill.activeRemaining),
-    triggerMode: skill.triggerMode ?? 'manual',
-    manual: (skill.triggerMode ?? 'manual') !== 'auto',
-    rangeSummary: summarizeRange(skill.range)
+export function buildMapLibraryPanelModel(entries, selectedIndex) {
+  return entries.map((entry, index) => ({
+    index,
+    id: entry.map.id,
+    name: entry.map.name,
+    sourceLabel: entry.sourceLabel ?? (entry.source === 'custom' ? '导入' : '默认'),
+    selected: index === selectedIndex,
+    deletable: Boolean(entry.deletable),
+    editable: entry.editable !== false
   }));
+}
+
+export function buildKeyboardShortcutGuideModel() {
+  return [
+    { key: 'Space', label: '开始 / 暂停 / 继续' },
+    { key: 'S', label: '切换速度' },
+    { key: 'Esc', label: '取消选择 / 取消部署方向' },
+    { key: 'R', label: '重新开始' },
+    { key: '1-9', label: '选择底部干员' }
+  ];
 }
 
 export function buildEnemyIntelModel(enemy) {
   if (!enemy) {
     return null;
   }
-  const rangeSummary = summarizeRange(enemy.range);
+  const attack = enemy.normalAttack ?? enemy;
+  const rangeSummary = summarizeRange(attack.range ?? enemy.range);
   const traits = [];
-  if (enemy.damageType === 'arts') traits.push('法术');
-  if (enemy.range && enemy.range.type !== 'melee') traits.push('远程');
+  if (enemy.damageType === 'arts' || attack.components?.some((component) => component.type === 'arts')) traits.push('法术');
+  if ((attack.range ?? enemy.range) && (attack.range ?? enemy.range).type !== 'melee') traits.push('远程');
   if (enemy.isFlying) traits.push('飞行');
   if (enemy.canBeBlocked === false) traits.push('不可阻挡');
   if ((enemy.blockBypass ?? 0) > 0) traits.push(`防阻挡${enemy.blockBypass}`);
@@ -114,11 +138,23 @@ export function buildEnemyIntelModel(enemy) {
     defense: enemy.defense ?? 0,
     resistance: enemy.resistance ?? 0,
     speed: enemy.speed ?? 0,
+    lifeValue: enemy.lifeValue ?? 1,
+    blockBypass: enemy.blockBypass ?? 0,
+    components: summarizeDamageComponents(attack.components ?? []),
     rangeSummary,
     traits,
     description: enemy.description ?? '',
     phaseCount: enemy.phases?.length ?? 0
   };
+}
+
+function summarizeDamageComponents(components) {
+  const labels = {
+    physical: '物理',
+    arts: '法术',
+    neural: '神经'
+  };
+  return components.map((component) => `${labels[component.type] ?? component.type} ${component.value}`);
 }
 
 export function buildRenderKeys(state, message = '') {
@@ -134,6 +170,7 @@ export function buildRenderKeys(state, message = '') {
   ]);
   const deployLimit = state.deployLimit ?? TOTAL_DEPLOY_LIMIT;
   const skills = buildSkillPanelModel(selected);
+  const selectedStats = selected ? buildOperatorDisplayStats(selected) : null;
 
   return {
     topStatus: JSON.stringify([
@@ -161,11 +198,12 @@ export function buildRenderKeys(state, message = '') {
       selected.id,
       Math.ceil(selected.hp),
       selected.maxHp,
-      selected.attack,
-      selected.defense,
-      selected.attackInterval,
-      selected.blockedCount,
-      selected.block,
+      selectedStats.attack,
+      selectedStats.attackSummary,
+      selectedStats.defense,
+      selectedStats.attackInterval,
+      selectedStats.blockedCount,
+      selectedStats.block,
       skills.map((skill) => [
         skill.id,
         skill.name,
@@ -208,16 +246,22 @@ export function buildRenderKeys(state, message = '') {
 }
 
 export class UIController {
-  constructor({ root, canvas, renderer, maps, operatorCatalog, enemyCatalog }) {
+  constructor({ root, canvas, renderer, maps, mapEntries = null, operatorCatalog, enemyCatalog, storage = globalThis.localStorage }) {
     this.root = root;
     this.canvas = canvas;
     this.renderer = renderer;
-    this.maps = maps;
+    this.storage = storage;
+    this.defaultMaps = mapEntries ? mapEntries.filter((entry) => entry.source === 'default').map((entry) => entry.map) : maps;
+    this.customMaps = mapEntries ? mapEntries.filter((entry) => entry.source === 'custom').map((entry) => entry.map) : [];
+    this.mapEntries = mapEntries ?? buildMapLibrary(maps, []);
+    this.maps = this.mapEntries.map((entry) => entry.map);
     this.operatorCatalog = operatorCatalog;
     this.enemyCatalog = enemyCatalog;
     this.mapIndex = 0;
     this.message = '';
     this.renderKeys = {};
+    this.mapOptionsKey = '';
+    this.mapLibraryKey = '';
     this.pendingDeployment = null;
     this.createGame(this.maps[this.mapIndex]);
     this.cacheElements();
@@ -245,6 +289,7 @@ export class UIController {
     this.controlPanel = this.root.querySelector('#control-panel');
     this.resultModal = this.root.querySelector('#result-modal');
     this.enemyIntelPanel = this.root.querySelector('#enemy-intel-panel');
+    this.mapLibraryPanel = this.root.querySelector('#map-library-panel');
     this.mapSelect = this.root.querySelector('#map-select');
     this.mapImportButton = this.root.querySelector('#map-import-button');
     this.mapImportInput = this.root.querySelector('#map-import-input');
@@ -256,12 +301,7 @@ export class UIController {
 
   bindEvents() {
     this.mapSelect.addEventListener('change', () => {
-      this.mapIndex = Number(this.mapSelect.value);
-      this.renderKeys = {};
-      this.pendingDeployment = null;
-      this.createGame(this.maps[this.mapIndex]);
-      this.message = '';
-      this.sync();
+      this.selectMapIndex(Number(this.mapSelect.value));
     });
 
     this.mapImportButton?.addEventListener('click', () => {
@@ -281,6 +321,26 @@ export class UIController {
         this.sync();
       } finally {
         this.mapImportInput.value = '';
+      }
+    });
+
+    this.mapLibraryPanel?.addEventListener('click', (event) => {
+      const selectButton = event.target.closest('[data-map-library-select]');
+      const editButton = event.target.closest('[data-map-library-edit]');
+      const deleteButton = event.target.closest('[data-map-library-delete]');
+
+      if (selectButton) {
+        this.selectMapIndex(Number(selectButton.dataset.mapLibrarySelect));
+        return;
+      }
+
+      if (editButton) {
+        this.openMapInEditor(Number(editButton.dataset.mapLibraryEdit));
+        return;
+      }
+
+      if (deleteButton) {
+        this.deleteCustomMap(deleteButton.dataset.mapLibraryDelete);
       }
     });
 
@@ -401,6 +461,9 @@ export class UIController {
     });
 
     window.addEventListener('keydown', (event) => {
+      if (this.handleGlobalShortcut(event)) {
+        return;
+      }
       if (!this.pendingDeployment) {
         return;
       }
@@ -423,22 +486,87 @@ export class UIController {
     });
   }
 
+  handleGlobalShortcut(event) {
+    if (isEditableTarget(event.target)) {
+      return false;
+    }
+    if (event.code === 'Space') {
+      event.preventDefault();
+      const status = this.game.getState().status;
+      if (status === 'ready') {
+        this.game.start();
+        this.loop.start();
+      } else if (status === 'paused') {
+        this.game.resume();
+      } else if (status === 'running') {
+        this.game.pause();
+      }
+      this.sync();
+      return true;
+    }
+    if (event.key === 's' || event.key === 'S') {
+      event.preventDefault();
+      this.game.cycleSpeed();
+      this.sync();
+      return true;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.pendingDeployment = null;
+      this.game.clearSelection();
+      this.message = '';
+      this.sync();
+      return true;
+    }
+    if (event.key === 'r' || event.key === 'R') {
+      event.preventDefault();
+      this.game.restart();
+      this.renderKeys = {};
+      this.pendingDeployment = null;
+      this.message = '';
+      this.sync();
+      return true;
+    }
+    if (/^[1-9]$/.test(event.key)) {
+      const index = Number(event.key) - 1;
+      const operator = buildOperatorDeckModel(this.game.getState())[index];
+      if (!operator || operator.disabled) {
+        return false;
+      }
+      event.preventDefault();
+      const result = this.game.toggleOperatorSelection(operator.id);
+      this.pendingDeployment = null;
+      this.message = result.canceled ? '已取消部署选择' : `${operator.name} 待部署`;
+      this.sync();
+      return true;
+    }
+    return false;
+  }
+
   importMapJson(jsonText) {
-    const imported = importMapJsonIntoList(this.maps, jsonText);
-    this.maps = imported.maps;
-    this.mapIndex = imported.mapIndex;
+    const rawMap = typeof jsonText === 'string' ? JSON.parse(jsonText) : jsonText;
+    const saved = saveCustomMapToLibrary(rawMap, this.storage);
+    this.customMaps = saved.maps;
+    this.rebuildMapLibrary();
+    this.mapIndex = this.mapEntries.findIndex((entry) => entry.source === 'custom' && entry.map.id === saved.map.id);
+    if (this.mapIndex < 0) {
+      this.mapIndex = this.maps.length - 1;
+    }
     this.renderKeys = {};
-    this.message = `已导入地图：${imported.map.name}`;
+    this.mapOptionsKey = '';
+    this.mapLibraryKey = '';
+    this.message = `已导入地图：${saved.map.name}`;
     this.pendingDeployment = null;
-    this.createGame(imported.map);
+    this.createGame(saved.map);
     this.sync();
-    return imported.map;
+    return saved.map;
   }
 
   sync() {
     const state = this.game.getState();
     const keys = buildRenderKeys(state, this.message);
     this.renderMapOptions();
+    this.renderMapLibraryPanel();
     this.renderIfChanged('topStatus', keys.topStatus, () => this.renderTopStatus(state));
     this.renderIfChanged('operatorDeck', keys.operatorDeck, () => this.renderOperatorDeck(state));
     this.renderIfChanged('infoPanel', keys.infoPanel, () => this.renderInfoPanel(state));
@@ -495,6 +623,61 @@ export class UIController {
     this.sync();
   }
 
+  selectMapIndex(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.maps.length) {
+      return;
+    }
+    this.mapIndex = index;
+    this.renderKeys = {};
+    this.pendingDeployment = null;
+    this.createGame(this.maps[this.mapIndex]);
+    this.message = '';
+    this.sync();
+  }
+
+  rebuildMapLibrary() {
+    this.mapEntries = buildMapLibrary(this.defaultMaps, this.customMaps);
+    this.maps = this.mapEntries.map((entry) => entry.map);
+  }
+
+  openMapInEditor(index) {
+    const entry = this.mapEntries[index];
+    if (!entry) {
+      return;
+    }
+    try {
+      storeEditorDraftMap(entry.map, this.storage, { source: entry.source });
+      window.location.href = '/editor.html?draft=1';
+    } catch (error) {
+      this.message = `编辑跳转失败：${error.message}`;
+      this.sync();
+    }
+  }
+
+  deleteCustomMap(mapId) {
+    const deletingSelected = this.mapEntries[this.mapIndex]?.source === 'custom' && this.mapEntries[this.mapIndex]?.map.id === mapId;
+    try {
+      const result = deleteCustomMapFromLibrary(mapId, this.storage);
+      this.customMaps = result.maps;
+      this.rebuildMapLibrary();
+      this.mapOptionsKey = '';
+      this.mapLibraryKey = '';
+      if (deletingSelected) {
+        this.mapIndex = 0;
+        this.renderKeys = {};
+        this.pendingDeployment = null;
+        this.createGame(this.maps[this.mapIndex]);
+      } else {
+        this.mapIndex = Math.min(this.mapIndex, this.maps.length - 1);
+      }
+      this.message = '已删除导入地图';
+      this.sync();
+    } catch (error) {
+      this.message = `删除失败：${error.message}`;
+      this.sync();
+    }
+  }
+
   renderIfChanged(section, key, render) {
     if (this.renderKeys[section] === key) {
       return;
@@ -504,13 +687,47 @@ export class UIController {
   }
 
   renderMapOptions() {
-    if (this.mapSelect.options.length === this.maps.length) {
+    const key = this.mapEntries.map((entry) => `${entry.key}:${entry.map.name}`).join('|');
+    if (this.mapOptionsKey === key) {
+      this.mapSelect.value = String(this.mapIndex);
       return;
     }
-    this.mapSelect.innerHTML = this.maps.map((map, index) => {
-      return `<option value="${index}">${map.name}</option>`;
+    this.mapSelect.innerHTML = this.mapEntries.map((entry, index) => {
+      return `<option value="${index}">${escapeHtml(entry.map.name)}</option>`;
     }).join('');
     this.mapSelect.value = String(this.mapIndex);
+    this.mapOptionsKey = key;
+  }
+
+  renderMapLibraryPanel() {
+    if (!this.mapLibraryPanel) {
+      return;
+    }
+
+    const model = buildMapLibraryPanelModel(this.mapEntries, this.mapIndex);
+    const key = JSON.stringify(model);
+    if (this.mapLibraryKey === key) {
+      return;
+    }
+
+    this.mapLibraryPanel.innerHTML = `
+      <h2>地图库</h2>
+      <div class="map-library-list">
+        ${model.map((entry) => `
+          <article class="map-library-item ${entry.selected ? 'selected' : ''}">
+            <button data-map-library-select="${entry.index}">
+              <strong>${escapeHtml(entry.name)}</strong>
+              <span>${escapeHtml(entry.sourceLabel)} · ${escapeHtml(entry.id)}</span>
+            </button>
+            <div class="map-library-actions">
+              <button data-map-library-edit="${entry.index}" ${entry.editable ? '' : 'disabled'}>编辑</button>
+              <button data-map-library-delete="${escapeHtml(entry.id)}" ${entry.deletable ? '' : 'disabled'}>删除</button>
+            </div>
+          </article>
+        `).join('')}
+      </div>
+    `;
+    this.mapLibraryKey = key;
   }
 
   renderTopStatus(state) {
@@ -546,35 +763,52 @@ export class UIController {
       this.infoPanel.innerHTML = `
         <h2>战术面板</h2>
         <p>选择底部干员后点击合法格部署。右键已部署干员撤退。</p>
+        ${this.renderShortcutGuide()}
       `;
       return;
     }
 
     const skills = buildSkillPanelModel(selected);
+    const stats = buildOperatorDisplayStats(selected);
     this.infoPanel.innerHTML = `
       <h2>${selected.name}</h2>
       <dl>
         <div><dt>职业</dt><dd>${selected.className}</dd></div>
-        <div><dt>生命</dt><dd>${Math.ceil(selected.hp)}/${selected.maxHp}</dd></div>
-        <div><dt>攻击</dt><dd>${selected.attack}</dd></div>
-        <div><dt>防御</dt><dd>${selected.defense}</dd></div>
-        <div><dt>间隔</dt><dd>${selected.attackInterval}s</dd></div>
-        <div><dt>阻挡</dt><dd>${selected.blockedCount}/${selected.block}</dd></div>
+        <div><dt>生命</dt><dd>${stats.hp}/${stats.maxHp}</dd></div>
+        <div><dt>攻击</dt><dd>${stats.attack}<small>${escapeHtml(stats.attackSummary)}</small></dd></div>
+        <div><dt>防御</dt><dd>${stats.defense}</dd></div>
+        <div><dt>法抗</dt><dd>${stats.resistance}</dd></div>
+        <div><dt>间隔</dt><dd>${stats.attackInterval}s</dd></div>
+        <div><dt>阻挡</dt><dd>${stats.blockedCount}/${stats.block}</dd></div>
       </dl>
       ${skills.length > 0 ? skills.map((skill) => `
         <section class="skill-panel">
           <h3>${skill.name}<span>${skill.triggerMode === 'auto' ? '自动' : '手动'}</span></h3>
           <p>${skill.description}</p>
           <small>范围：${skill.rangeSummary}</small>
-          <div class="skill-sp"><span style="width:${Math.min(100, (skill.sp / skill.spCost) * 100)}%"></span></div>
+          <div class="skill-sp"><span style="width:${skillPanelPercent(skill)}%"></span></div>
           <div class="skill-row">
-            <strong>${skill.sp}/${skill.spCost} SP</strong>
+            <strong>${skillPanelValue(skill)}</strong>
             ${skill.manual
-              ? `<button data-skill-button="${skill.id}" ${skill.ready ? '' : 'disabled'}>${skill.activeRemaining > 0 ? `${skill.activeRemaining}s` : '释放技能'}</button>`
-              : `<button disabled>${skill.activeRemaining > 0 ? `${skill.activeRemaining}s` : '自动'}</button>`}
+              ? `<button data-skill-button="${skill.id}" ${skill.ready ? '' : 'disabled'}>${skillButtonLabel(skill, '释放技能')}</button>`
+              : `<button disabled>${skillButtonLabel(skill, '自动')}</button>`}
           </div>
         </section>
       `).join('') : ''}
+      ${this.renderShortcutGuide()}
+    `;
+  }
+
+  renderShortcutGuide() {
+    return `
+      <section class="shortcut-guide">
+        <h3>快捷键</h3>
+        <dl>
+          ${buildKeyboardShortcutGuideModel().map((item) => `
+            <div><dt>${escapeHtml(item.key)}</dt><dd>${escapeHtml(item.label)}</dd></div>
+          `).join('')}
+        </dl>
+      </section>
     `;
   }
 
@@ -657,6 +891,34 @@ export class UIController {
   }
 }
 
+function skillPanelPercent(skill) {
+  if (Number(skill.ammo ?? 0) > 0 && Number(skill.ammoRemaining ?? 0) > 0) {
+    return Math.min(100, (skill.ammoRemaining / skill.ammo) * 100);
+  }
+  const spCost = Number(skill.spCost ?? 0);
+  if (!Number.isFinite(spCost) || spCost <= 0) {
+    return 0;
+  }
+  return Math.min(100, (Number(skill.sp ?? 0) / spCost) * 100);
+}
+
+function skillPanelValue(skill) {
+  if (Number(skill.ammo ?? 0) > 0 && Number(skill.ammoRemaining ?? 0) > 0) {
+    return `${skill.ammoRemaining}/${skill.ammo} 弹药`;
+  }
+  return `${skill.sp}/${skill.spCost} SP`;
+}
+
+function skillButtonLabel(skill, fallback) {
+  if (Number(skill.ammo ?? 0) > 0 && Number(skill.ammoRemaining ?? 0) > 0) {
+    return `${skill.ammoRemaining} 发`;
+  }
+  if (skill.activeRemaining > 0) {
+    return `${skill.activeRemaining}s`;
+  }
+  return fallback;
+}
+
 function createEnemyIntelStat(label, value) {
   const row = document.createElement('div');
   const term = document.createElement('dt');
@@ -734,4 +996,17 @@ function directionLabel(direction) {
     return '向左';
   }
   return '向右';
+}
+
+function isEditableTarget(target) {
+  const tagName = target?.tagName;
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target?.isContentEditable;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }

@@ -45,6 +45,14 @@ export function createOperatorAttackEffect({ source, target, color = '#f6c445' }
   };
 }
 
+export function createOperatorHealEffect({ source, target, color = '#72e0a6' }) {
+  return {
+    type: 'operator_heal',
+    duration: 0.36,
+    payload: { source, target, color }
+  };
+}
+
 export function createEnemyAttackEffect({ source, target, color = '#ec5757' }) {
   return {
     type: 'enemy_attack',
@@ -58,6 +66,22 @@ export function createEnemyDeathEffect({ cell, color = '#e15f5f', phaseBreak = f
     type: 'enemy_death',
     duration: phaseBreak ? 0.45 : 0.62,
     payload: { cell, color, phaseBreak }
+  };
+}
+
+export function createFloatingTextEffect({ cell, amount, kind = 'damage', stackIndex = 0 }) {
+  return {
+    type: 'floating_text',
+    duration: 0.9,
+    payload: { cell, amount, kind, stackIndex }
+  };
+}
+
+export function createBossBarEffect({ bossId, kind = 'enter' }) {
+  return {
+    type: 'boss_bar',
+    duration: kind === 'phase_refill' ? 0.8 : 0.65,
+    payload: { bossId, kind }
   };
 }
 

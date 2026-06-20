@@ -1,4 +1,4 @@
-import { calculateCanvasMetrics, tileColorForType } from '../renderers/CanvasRenderer.js';
+import { buildForbiddenTileOverlayModel, calculateCanvasMetrics, tileColorForType } from '../renderers/CanvasRenderer.js';
 import { gridToCenter, pixelToGrid } from '../utils/GridMath.js';
 
 export class EditorRenderer {
@@ -17,6 +17,7 @@ export class EditorRenderer {
     this.metrics = calculateCanvasMetrics(state.map, width, height);
     this.drawBackground(ctx, width, height);
     this.drawGrid(ctx, state, hoverCell);
+    this.drawMapOverlays(ctx, state);
     this.drawPreviewCells(ctx, previewCells);
     this.drawPaths(ctx, state);
     ctx.restore();
@@ -101,6 +102,60 @@ export class EditorRenderer {
         ctx.textBaseline = 'middle';
         ctx.fillText(String(index + 1), x, y);
       });
+
+      (path.waypointActions ?? []).forEach((waypoint) => {
+        const point = path.points[waypoint.pointIndex];
+        if (!point) {
+          return;
+        }
+        const center = gridToCenter(point, tileSize);
+        const x = offsetX + center.x;
+        const y = offsetY + center.y;
+        ctx.save();
+        ctx.fillStyle = '#f6c445';
+        ctx.strokeStyle = '#061015';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(6, tileSize * 0.15), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      });
+    });
+  }
+
+  drawMapOverlays(ctx, state) {
+    const { tileSize, offsetX, offsetY } = this.metrics;
+    Object.entries(state.map.tileMeta ?? {}).forEach(([key, meta]) => {
+      if (meta.deployable !== false) {
+        return;
+      }
+      const [x, y] = key.split(',').map(Number);
+      const overlay = buildForbiddenTileOverlayModel({ x, y }, this.metrics);
+      ctx.save();
+      ctx.fillStyle = 'rgba(236, 87, 87, 0.18)';
+      ctx.fillRect(overlay.fillRect.x, overlay.fillRect.y, overlay.fillRect.width, overlay.fillRect.height);
+      ctx.strokeStyle = 'rgba(236, 87, 87, 0.7)';
+      ctx.lineWidth = Math.max(2, tileSize * 0.08);
+      ctx.lineCap = 'round';
+      overlay.lines.forEach((line) => {
+        ctx.beginPath();
+        ctx.moveTo(line.from.x, line.from.y);
+        ctx.lineTo(line.to.x, line.to.y);
+        ctx.stroke();
+      });
+      ctx.restore();
+    });
+
+    (state.map.paths ?? []).forEach((path) => {
+      const entry = path.entry ?? path.points?.[0];
+      const exit = path.exit ?? path.points?.[path.points.length - 1];
+      if (entry) {
+        drawBadge(ctx, this.metrics, entry, '#ec5757', 'IN');
+      }
+      if (exit) {
+        drawBadge(ctx, this.metrics, exit, '#5fc9ff', 'OUT');
+      }
     });
   }
 
@@ -132,4 +187,21 @@ export class EditorRenderer {
     }
     return { width, height, ratio };
   }
+}
+
+function drawBadge(ctx, metrics, cell, color, label) {
+  const { tileSize, offsetX, offsetY } = metrics;
+  const px = offsetX + cell.x * tileSize;
+  const py = offsetY + cell.y * tileSize;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.68;
+  ctx.fillRect(px + 3, py + 3, tileSize - 6, tileSize - 6);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#061015';
+  ctx.font = `800 ${Math.max(8, tileSize * 0.12)}px Inter, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, px + tileSize / 2, py + tileSize / 2);
+  ctx.restore();
 }

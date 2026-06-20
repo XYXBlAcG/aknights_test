@@ -1,0 +1,51 @@
+{
+  "version": "2.0",
+  "id": "restricted-entry-test",
+  "name": "封锁线测试",
+  "description": "测试入口出口禁部署、路径格部署开关和反阻挡敌人。",
+  "width": 9,
+  "height": 6,
+  "initialCost": 25,
+  "maxCost": 30,
+  "maxLives": 12,
+  "totalWaves": 3,
+  "grid": [
+    ["wall", "high", "high", "wall", "high", "wall", "high", "high", "wall"],
+    ["wall", "wall", "high", "wall", "high", "wall", "high", "wall", "wall"],
+    ["path", "path", "path", "path", "path", "path", "path", "path", "path"],
+    ["wall", "high", "wall", "wall", "high", "wall", "wall", "high", "wall"],
+    ["wall", "high", "high", "wall", "wall", "wall", "high", "high", "wall"],
+    ["wall", "wall", "wall", "wall", "high", "wall", "wall", "wall", "wall"]
+  ],
+  "tileMeta": {
+    "2,2": { "deployable": false },
+    "3,2": { "deployable": false },
+    "5,2": { "deployable": false }
+  },
+  "paths": [
+    {
+      "id": "main",
+      "name": "封锁走廊",
+      "entry": { "x": 0, "y": 2 },
+      "exit": { "x": 8, "y": 2 },
+      "points": [
+        { "x": 0, "y": 2 },
+        { "x": 1, "y": 2 },
+        { "x": 2, "y": 2 },
+        { "x": 3, "y": 2 },
+        { "x": 4, "y": 2 },
+        { "x": 5, "y": 2 },
+        { "x": 6, "y": 2 },
+        { "x": 7, "y": 2 },
+        { "x": 8, "y": 2 }
+      ],
+      "color": "#ec5757",
+      "lifeDamage": 1
+    }
+  ],
+  "timeline": [
+    { "wave": 1, "startTime": 2, "enemyType": "infantry", "count": 6, "interval": 0.8, "pathId": "main" },
+    { "wave": 2, "startTime": 18, "enemyType": "heavy", "count": 4, "interval": 1.2, "pathId": "main" },
+    { "wave": 3, "startTime": 34, "enemyType": "block-breacher", "count": 3, "interval": 2.0, "pathId": "main" }
+  ]
+}

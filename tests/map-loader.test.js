@@ -41,6 +41,38 @@ test('validateMap rejects path points outside the grid', () => {
   }), /outside grid/);
 });
 
+test('normalizeMap preserves tileMeta and waypoint actions', () => {
+  const map = normalizeMap({
+    version: '2.0',
+    id: 'waypoint-map',
+    name: 'Waypoint Map',
+    width: 4,
+    height: 1,
+    initialCost: 20,
+    maxCost: 30,
+    maxLives: 10,
+    totalWaves: 1,
+    grid: [['path', 'path', 'path', 'path']],
+    tileMeta: { '1,0': { deployable: false } },
+    paths: [{
+      id: 'main',
+      name: 'main',
+      points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 3, y: 0 }],
+      color: '#fff',
+      waypointActions: [{
+        id: 'hold',
+        pointIndex: 1,
+        oncePerEnemy: true,
+        actions: [{ type: 'pause', duration: 2 }]
+      }]
+    }],
+    timeline: [{ wave: 1, startTime: 0, enemyType: 'infantry', count: 1, pathId: 'main' }]
+  });
+
+  assert.equal(map.tileMeta['1,0'].deployable, false);
+  assert.equal(map.paths[0].waypointActions[0].actions[0].duration, 2);
+});
+
 test('diamond range uses Manhattan distance', () => {
   assert.equal(isCellInDiamondRange({ x: 0, y: 0 }, { x: 2, y: 1 }, 3), true);
   assert.equal(isCellInDiamondRange({ x: 0, y: 0 }, { x: 3, y: 1 }, 3), false);
