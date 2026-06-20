@@ -647,7 +647,7 @@ export class UIController {
     }
     try {
       storeEditorDraftMap(entry.map, this.storage, { source: entry.source });
-      window.location.href = '/editor.html?draft=1';
+      window.location.href = `${import.meta.env.BASE_URL}editor.html?draft=1`;
     } catch (error) {
       this.message = `编辑跳转失败：${error.message}`;
       this.sync();
