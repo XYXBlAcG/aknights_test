@@ -1219,3 +1219,231 @@ button:disabled {
     min-height: 520px;
   }
 }
+
+@media (max-width: 640px) {
+  body {
+    overflow: auto;
+  }
+
+  #app {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-rows: auto minmax(360px, auto) auto;
+  }
+
+  .top-shell {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .brand,
+  #map-select,
+  .top-status {
+    grid-column: 1 / -1;
+  }
+
+  .editor-link,
+  .map-import-button {
+    grid-column: auto;
+    min-height: 34px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .map-import-button {
+    grid-column: 1 / -1;
+  }
+
+  .status-item {
+    min-width: 74px;
+    padding: 5px 7px;
+  }
+
+  .battle-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(320px, 52dvh) auto auto;
+    gap: 8px;
+    padding: 8px;
+    overflow: visible;
+  }
+
+  .battlefield-wrap {
+    min-height: min(52dvh, 420px);
+    order: 1;
+  }
+
+  .map-library-panel {
+    max-height: 160px;
+    order: 2;
+    padding: 10px;
+  }
+
+  .info-panel {
+    display: block;
+    max-height: 260px;
+    order: 3;
+    padding: 10px;
+    overflow: auto;
+  }
+
+  .info-panel h2 {
+    font-size: 16px;
+  }
+
+  .bottom-shell {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px;
+    overflow: visible;
+  }
+
+  .operator-deck {
+    grid-auto-columns: minmax(92px, 36vw);
+  }
+
+  .operator-card {
+    min-height: 72px;
+    grid-template-columns: 30px 1fr;
+    gap: 5px 6px;
+    padding: 6px;
+  }
+
+  .operator-class {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .operator-name,
+  .operator-meta {
+    font-size: 12px;
+  }
+
+  .operator-reason {
+    right: 6px;
+    top: 4px;
+    font-size: 10px;
+  }
+
+  .control-panel {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .control-panel button {
+    min-height: 34px;
+    font-size: 12px;
+  }
+
+  .enemy-intel-panel {
+    left: 8px;
+    right: 8px;
+    bottom: 96px;
+    width: auto;
+    max-height: 42dvh;
+  }
+
+  .result-box {
+    width: min(340px, calc(100vw - 24px));
+    padding: 16px;
+  }
+
+  .editor-page {
+    overflow: auto;
+  }
+
+  #editor-app,
+  #custom-editor-app {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-rows: auto auto;
+  }
+
+  .editor-topbar {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .editor-nav {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .editor-nav a,
+  .editor-nav button {
+    min-height: 34px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .editor-shell,
+  .custom-editor-shell {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px;
+    overflow: visible;
+  }
+
+  .editor-left,
+  .editor-right,
+  .custom-list-panel,
+  .custom-form-panel,
+  .custom-side-panel {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .editor-panel {
+    padding: 10px;
+  }
+
+  .editor-canvas-wrap {
+    min-height: min(58dvh, 460px);
+  }
+
+  .tool-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .path-row,
+  .timeline-row,
+  .waypoint-action-row {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-template-list {
+    max-height: 220px;
+  }
+
+  .custom-form-panel form {
+    grid-template-columns: 1fr;
+  }
+
+  .range-presets {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .skill-editor-card {
+    grid-template-columns: 1fr;
+  }
+
+  .component-row {
+    grid-template-columns: 1fr;
+  }
+
+  .component-advanced {
+    grid-template-columns: 1fr;
+  }
+
+  .component-row {
+    align-items: stretch;
+  }
+
+  .range-grid {
+    width: min(100%, 320px);
+  }
+}
